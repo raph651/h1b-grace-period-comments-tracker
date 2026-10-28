@@ -48,6 +48,38 @@ npm run serve
 
 Node.js 22.6+ is required (the build uses native `module.stripTypeScriptTypes`).
 
+## API keys
+
+The sync needs two keys. Keep them in a file **outside** the repository, so they cannot be committed:
+
+```bash
+mkdir -p ~/.config/uscis-tracker
+cat > ~/.config/uscis-tracker/keys.env <<'EOF'
+REGULATIONS_API_KEY=your_data_gov_key
+GEMINI_API_KEY=your_ai_studio_key
+EOF
+chmod 600 ~/.config/uscis-tracker/keys.env
+```
+
+Then push them to GitHub Actions secrets:
+
+```bash
+./scripts/set-secrets.sh --dry-run   # confirm both keys are found; writes nothing
+./scripts/set-secrets.sh             # creates REGULATIONS_API_KEY and GEMINI_API_KEY
+```
+
+Each value is piped to `gh secret set` on stdin, so it never appears in `argv`, shell history, or the script's output. GitHub stores secrets write-only — `gh secret list` shows the names, and nothing (including this tooling) can read the values back.
+
+For a local run, point Node at the same file:
+
+```bash
+node --env-file="$HOME/.config/uscis-tracker/keys.env" --experimental-strip-types scripts/sync-comments.ts
+```
+
+If you only need the scheduled Action and never run locally, `gh secret set REGULATIONS_API_KEY` on its own will prompt for the value interactively instead.
+
+Rotate or revoke keys at [data.gov](https://api.data.gov/signup/) and [Google AI Studio](https://aistudio.google.com/apikey); then re-run `set-secrets.sh`.
+
 ## Hosting on GitHub Pages
 
 1. Push this folder to a repository's `main` branch.

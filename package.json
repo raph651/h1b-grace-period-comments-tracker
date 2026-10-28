@@ -7,7 +7,8 @@
   "scripts": {
     "build": "node scripts/build.ts",
     "sync": "node scripts/sync-comments.ts",
-    "serve": "python3 -m http.server 8080 --directory docs"
+    "serve": "python3 -m http.server 8080 --directory docs",
+    "secrets": "bash scripts/set-secrets.sh"
   },
   "devDependencies": {
     "typescript": "^5.8.2"
