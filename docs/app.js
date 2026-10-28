@@ -31,6 +31,7 @@ const FALLBACK_DEADLINE_ISO = '2026-11-11T04:59:59Z';
 const DEADLINE_TIME_ZONE = 'America/New_York';
 
 let historyPoints                 = [];
+let historySource                           = 'snapshots';
 let selectedIndex = 0;
 let chartMode                  = 'pct';
 let timerHandle                    ;
@@ -78,6 +79,28 @@ function formatInEastern(iso                    , style                         
   });
 
   return style === 'synced' ? `${base} ET` : `${base} ET`;
+}
+
+function formatUtcDate(iso        , withYear         )         {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(withYear ? { year: 'numeric' } : {}),
+    timeZone: 'UTC'
+  });
+}
+
+/**
+ * Comment dates arrive at day granularity (midnight UTC), so they are shown as
+ * a calendar date in UTC — formatting them in Eastern would slip a day back.
+ * Snapshot points carry a real instant and keep the Eastern rendering.
+ */
+function historyDateLabel(iso        , withYear         )         {
+  return historySource === 'comments'
+    ? formatUtcDate(iso, withYear)
+    : formatInEastern(iso, withYear ? 'point' : 'day');
 }
 
 function setText(id        , text        )       {
@@ -297,14 +320,14 @@ function renderLineChart()       {
   const labelY = height - 4;
   if (count === 1) {
     parts.push(
-      `<text class="tick" x="${(padL + innerW / 2).toFixed(1)}" y="${labelY}" text-anchor="middle">${formatInEastern(historyPoints[0].t, 'day')}</text>`
+      `<text class="tick" x="${(padL + innerW / 2).toFixed(1)}" y="${labelY}" text-anchor="middle">${historyDateLabel(historyPoints[0].t, false)}</text>`
     );
   } else {
     parts.push(
-      `<text class="tick" x="${padL}" y="${labelY}" text-anchor="start">${formatInEastern(historyPoints[0].t, 'day')}</text>`
+      `<text class="tick" x="${padL}" y="${labelY}" text-anchor="start">${historyDateLabel(historyPoints[0].t, false)}</text>`
     );
     parts.push(
-      `<text class="tick" x="${(width - padR).toFixed(1)}" y="${labelY}" text-anchor="end">${formatInEastern(historyPoints[count - 1].t, 'day')}</text>`
+      `<text class="tick" x="${(width - padR).toFixed(1)}" y="${labelY}" text-anchor="end">${historyDateLabel(historyPoints[count - 1].t, false)}</text>`
     );
   }
 
@@ -399,7 +422,7 @@ function updateTimelineLabel()       {
   label.textContent =
     count === 1
       ? '1 snapshot'
-      : `${selectedIndex + 1} / ${count} · ${formatInEastern(point.t, 'day')}`;
+      : `${selectedIndex + 1} / ${count} · ${historyDateLabel(point.t, false)}`;
 }
 
 function updateShareBlock()       {
@@ -408,7 +431,7 @@ function updateShareBlock()       {
 
   renderDonut(point);
   renderDonutLegend(point);
-  setText('donut-date', formatInEastern(point.t, 'point'));
+  setText('donut-date', historyDateLabel(point.t, true));
   updateTimelineLabel();
 }
 
@@ -417,7 +440,15 @@ function renderHistoryStatus()       {
   if (!element) return;
 
   const count = historyPoints.length;
-  element.textContent = count < 2 ? '' : `${count} snapshots · one every six hours`;
+  if (count < 2) {
+    element.textContent = '';
+    return;
+  }
+
+  element.textContent =
+    historySource === 'comments'
+      ? `${count} days · rebuilt from comment dates`
+      : `${count} snapshots · one every six hours`;
 }
 
 /* — wiring — */
@@ -482,15 +513,20 @@ async function loadSummary()                          {
   }
 }
 
-async function loadHistory(summary                )                          {
+async function loadHistory(summary                )                                                                        {
   try {
     const response = await fetch('./data/history.json', { cache: 'no-store' });
     if (response.ok) {
-      const data = (await response.json())                               ;
+      const data = (await response.json())     
+                                          
+                                
+       ;
       const points = (data.points || [])
         .filter((point) => point && typeof point.t === 'string')
         .sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
-      if (points.length > 0) return points;
+      if (points.length > 0) {
+        return { points, source: data.source === 'comments' ? 'comments' : 'snapshots' };
+      }
     }
   } catch (error) {
     console.warn('History snapshot unavailable.', error);
@@ -499,17 +535,20 @@ async function loadHistory(summary                )                          {
   // Before the first history write, fall back to the single current snapshot.
   const counts = summary.counts || {};
   const total = summary.totalPublishedOnDocket || summary.totalIndexedInTracker || 0;
-  if (total <= 0) return [];
+  if (total <= 0) return { points: [], source: 'snapshots' };
 
-  return [
-    {
-      t: summary.lastSyncedAt || new Date().toISOString(),
-      support: counts.Support || 0,
-      oppose: counts.Oppose || 0,
-      cantTell: counts["Can't tell"] || 0,
-      total
-    }
-  ];
+  return {
+    points: [
+      {
+        t: summary.lastSyncedAt || new Date().toISOString(),
+        support: counts.Support || 0,
+        oppose: counts.Oppose || 0,
+        cantTell: counts["Can't tell"] || 0,
+        total
+      }
+    ],
+    source: 'snapshots'
+  };
 }
 
 async function init()                {
@@ -532,7 +571,9 @@ async function init()                {
   renderCounts(summary);
   setText('synced', formatInEastern(summary.lastSyncedAt, 'synced'));
 
-  historyPoints = await loadHistory(summary);
+  const history = await loadHistory(summary);
+  historyPoints = history.points;
+  historySource = history.source;
   selectedIndex = Math.max(0, historyPoints.length - 1);
 
   renderLineChart();

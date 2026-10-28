@@ -245,39 +245,48 @@ function formatRegulationsDate(isoDate: string): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
-function readHistory(): HistoryPoint[] {
-  if (!fs.existsSync(HISTORY_PATH)) return [];
+interface HistoryFile {
+  source?: 'comments' | 'snapshots';
+  points?: HistoryPoint[];
+}
+
+function readHistoryFile(): HistoryFile {
+  if (!fs.existsSync(HISTORY_PATH)) return { points: [] };
   try {
-    const parsed = JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8')) as { points?: HistoryPoint[] };
-    return Array.isArray(parsed.points) ? parsed.points : [];
+    const parsed = JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8')) as HistoryFile;
+    return { source: parsed.source, points: Array.isArray(parsed.points) ? parsed.points : [] };
   } catch {
-    return [];
+    return { points: [] };
   }
 }
 
-function writeHistory(points: HistoryPoint[]): void {
+function writeHistory(source: 'comments' | 'snapshots', points: HistoryPoint[]): void {
   fs.mkdirSync(path.dirname(HISTORY_PATH), { recursive: true });
-  fs.writeFileSync(HISTORY_PATH, `${JSON.stringify({ points }, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(HISTORY_PATH, `${JSON.stringify({ source, points }, null, 2)}\n`, 'utf8');
   console.log(`Saved ${points.length} history point(s) to ${HISTORY_PATH}`);
 }
 
 /**
- * Reconstruct a cumulative daily series from every comment's postedDate.
- * Valid only when the run retrieved the full population, which is why it is
- * gated on a minimum sample and only used before real snapshots accumulate.
+ * Rebuild the cumulative curve from each comment's postedDate.
+ *
+ * Regulations.gov reports postedDate at day granularity, so this yields one
+ * point per calendar day, carrying the running total of comments filed and the
+ * running stance split as of that day. One full sync reconstructs the entire
+ * comment period instead of waiting for 6-hourly snapshots to accumulate.
  */
-function buildHistoryFromComments(comments: CommentRecord[]): HistoryPoint[] {
+export function buildHistoryFromComments(comments: CommentRecord[]): HistoryPoint[] {
   const dated = comments.filter((comment) => comment.postedDate);
   if (dated.length < 100) return [];
 
-  const byDay = new Map<string, { support: number; oppose: number; cantTell: number; total: number }>();
+  const byDay = new Map<string, { support: number; oppose: number; cantTell: number; total: number; last: string }>();
   for (const comment of dated) {
     const day = comment.postedDate.slice(0, 10);
-    const bucket = byDay.get(day) ?? { support: 0, oppose: 0, cantTell: 0, total: 0 };
+    const bucket = byDay.get(day) ?? { support: 0, oppose: 0, cantTell: 0, total: 0, last: comment.postedDate };
     if (comment.stance === 'Support') bucket.support++;
     else if (comment.stance === 'Oppose') bucket.oppose++;
     else bucket.cantTell++;
     bucket.total++;
+    if (comment.postedDate > bucket.last) bucket.last = comment.postedDate;
     byDay.set(day, bucket);
   }
 
@@ -292,20 +301,27 @@ function buildHistoryFromComments(comments: CommentRecord[]): HistoryPoint[] {
         cantTell: running.cantTell + bucket.cantTell,
         total: running.total + bucket.total
       };
-      return { t: `${day}T23:59:59Z`, ...running };
+      return { t: bucket.last, ...running };
     });
 }
 
 function updateHistory(summary: TrackerSummary, comments: CommentRecord[]): void {
-  let points = readHistory();
+  const existing = readHistoryFile();
+  const existingPoints = existing.points || [];
+  const reconstructed = buildHistoryFromComments(comments);
 
-  // A full sync can backfill the whole curve from per-comment dates.
-  if (points.length < 2) {
-    const reconstructed = buildHistoryFromComments(comments);
-    if (reconstructed.length >= 2) {
-      console.log(`Backfilled ${reconstructed.length} history points from comment dates.`);
-      points = reconstructed;
-    }
+  // The daily reconstruction is the source of truth whenever the run saw the
+  // whole docket. Any finer-grained snapshots recorded after the last comment
+  // day are kept on top so the curve keeps extending between syncs.
+  let points = existingPoints;
+  let source: 'comments' | 'snapshots' = existing.source === 'comments' ? 'comments' : 'snapshots';
+
+  if (reconstructed.length >= 2) {
+    const lastDay = reconstructed[reconstructed.length - 1].t;
+    const laterSnapshots = existingPoints.filter((point) => point.t > lastDay);
+    points = [...reconstructed, ...laterSnapshots];
+    source = 'comments';
+    console.log(`Rebuilt ${reconstructed.length} daily points from comment posted dates.`);
   }
 
   const latest: HistoryPoint = {
@@ -327,7 +343,7 @@ function updateHistory(summary: TrackerSummary, comments: CommentRecord[]): void
   if (changed) points = [...points, latest];
   if (points.length > MAX_HISTORY_POINTS) points = points.slice(-MAX_HISTORY_POINTS);
 
-  writeHistory(points);
+  writeHistory(source, points);
 }
 
 async function main() {

@@ -16,7 +16,7 @@ It is informational only: no solicitation, no recommendations, no legal advertis
 `scripts/sync-comments.ts` classifies each comment into **Support**, **Oppose**, or **Can't tell** from Regulations.gov data and writes two files:
 
 - `docs/data/summary.json` — the current snapshot the page renders.
-- `docs/data/history.json` — an append-only log of `{ t, support, oppose, cantTell, total }` points, one per sync run, capped at 2,000 points.
+- `docs/data/history.json` — the time series, plus a `source` field saying how it was produced.
 
 The GitHub Actions workflow runs every 6 hours (cron `15 */6 * * *`) until the deadline, then commits both files and deploys `docs/` to Pages.
 
@@ -27,7 +27,11 @@ The GitHub Actions workflow runs every 6 hours (cron `15 */6 * * *`) until the d
 
 ### A note on history
 
-The line chart needs at least two snapshots. On the first sync that retrieves the full docket, `history.json` is backfilled from each comment's `postedDate`, which reconstructs the cumulative curve for the entire comment period in one run. Until then the page says so plainly rather than drawing a fake line.
+Every comment carries a `postedDate`, so the curve does not have to be waited for. Any sync that retrieves the full docket rebuilds `history.json` from those dates — one point per calendar day, each holding the running total and the running stance split as of that day (`"source": "comments"`). That means the chart and the timeline dragger cover the entire comment period, from the first comment to the last, on the very first full sync.
+
+Snapshots taken between syncs are kept as extra points on top (`"source": "snapshots"` when no reconstruction is possible). Until a full sync runs, the file holds the single current snapshot and the page says so plainly rather than drawing a fake line.
+
+`postedDate` is day-granular, so comment-derived points are labelled as calendar dates in UTC; snapshot points keep their Eastern timestamps.
 
 ## Quick Start (Local Development)
 
