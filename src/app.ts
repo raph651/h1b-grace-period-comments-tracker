@@ -1,811 +1,552 @@
+/**
+ * Comment Period Timer — the whole client.
+ *
+ * Four things and nothing else: a countdown to the comment deadline, the total
+ * number of filed comments with the support/oppose/can't-tell split, a line
+ * chart of that split over time, and a donut tied to a timeline dragger.
+ *
+ * Data comes from ./data/summary.json and ./data/history.json, both rewritten
+ * by the sync workflow every six hours.
+ */
+
 type Stance = 'Support' | 'Oppose' | "Can't tell";
 
-interface CommentRecord {
-  id: string;
-  title: string;
-  submitterName: string;
-  postedDate: string;
-  lastModifiedDate: string;
-  campaignId: string | null;
-  commentText: string;
-  stance: Stance;
-  reason: string;
-  classifiedBy: 'gemini' | 'campaign-template' | 'heuristic';
-  url: string;
-}
-
-interface CampaignSummary {
-  campaignId: string;
-  label: string;
-  count: number;
-  stance: Stance;
-  sampleId: string;
-  sampleUrl: string;
-  sampleExcerpt: string;
-}
-
 interface TrackerSummary {
-  documentId: string;
-  docketId: string;
-  title: string;
-  documentUrl: string;
-  commentsPageUrl: string;
-  deadlineIso: string;
-  deadlineDisplay: string;
-  lastSyncedAt: string;
-  lastModifiedCursor: string | null;
-  totalPublishedOnDocket: number;
-  totalIndexedInTracker: number;
-  counts: {
-    Support: number;
-    Oppose: number;
-    "Can't tell": number;
-  };
-  campaigns: CampaignSummary[];
-  comments: CommentRecord[];
+  deadlineIso?: string;
+  lastSyncedAt?: string;
+  totalPublishedOnDocket?: number;
+  totalIndexedInTracker?: number;
+  counts?: Partial<Record<Stance, number>>;
 }
 
-const DEADLINE_MS = new Date('2026-11-11T04:59:59Z').getTime(); // Nov 10, 2026 11:59:59 PM EST
-const STORAGE_KEY_SNAPSHOT = 'uscis_2026_0364_snapshot_v1';
-const STORAGE_KEY_REG_API = 'uscis_2026_0364_reg_key';
-const STORAGE_KEY_GEMINI_API = 'uscis_2026_0364_gemini_key';
-
-let state: TrackerSummary | null = null;
-let activeStanceFilter: 'ALL' | Stance = 'ALL';
-let activeSourceFilter: string = 'ALL';
-let searchQuery = '';
-let isSyncing = false;
-
-function formatNumber(n: number): string {
-  return n.toLocaleString('en-US');
+interface HistoryPoint {
+  t: string;
+  support: number;
+  oppose: number;
+  cantTell: number;
+  total: number;
 }
 
-function formatPercent(part: number, total: number): string {
-  if (!total) return '0.0%';
-  return `${((part / total) * 100).toFixed(1)}%`;
+const FALLBACK_DEADLINE_ISO = '2026-11-11T04:59:59Z';
+const DEADLINE_TIME_ZONE = 'America/New_York';
+
+let historyPoints: HistoryPoint[] = [];
+let selectedIndex = 0;
+let chartMode: 'pct' | 'count' = 'pct';
+let timerHandle: number | undefined;
+
+function byId<T extends HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
 }
 
-function detectCampaignId(title: string): string | null {
-  const m = title.match(/\b(MM\d+)\b/i);
-  return m ? m[1].toUpperCase() : null;
+function pad(value: number): string {
+  return String(value).padStart(2, '0');
 }
 
-function extractSubmitter(title: string): string {
-  const m = title.match(/Submitted by\s+(.+)$/i);
-  return m ? m[1].trim() : 'Anonymous';
+function formatCount(value: number): string {
+  return value.toLocaleString('en-US');
 }
 
-function classifyHeuristicBrowser(text: string, title: string): { stance: Stance; reason: string } {
-  const combined = `${title}\n${text}`.toLowerCase();
+function formatInEastern(iso: string | undefined, style: 'deadline' | 'synced' | 'point' | 'day'): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
 
-  if (/\bmm78\b/i.test(combined)) {
-    return {
-      stance: 'Support',
-      reason: 'MM78 campaign explicitly supports eliminating the discretionary 60-day grace period.'
-    };
-  }
-  if (/\bmm83\b/i.test(combined)) {
-    return {
-      stance: 'Support',
-      reason: 'MM83 campaign states favor for ending the 60-day grace period.'
-    };
-  }
-  if (/\bmm73\b/i.test(combined)) {
-    return {
-      stance: 'Support',
-      reason: 'MM73 campaign urges DHS to finalize elimination of the 60-day grace period.'
-    };
+  if (style === 'day') {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: DEADLINE_TIME_ZONE });
   }
 
-  const opposePatterns = [
-    /oppose\s+(dhs'?s?\s+)?(proposal|proposed\s+rule|eliminating|removing|removal)/i,
-    /strongly\s+oppose/i,
-    /respectfully\s+oppose/i,
-    /retain\s+the\s+(up-to-)?60-day\s+grace\s+period/i,
-    /keep\s+the\s+(60-day\s+)?grace\s+period/i,
-    /do\s+not\s+(eliminate|remove|end)\s+the\s+(discretionary\s+)?(60-day\s+)?grace\s+period/i,
-    /eliminating\s+the\s+grace\s+period\s+(would|will)\s+(harm|hurt|disrupt|force)/i,
-    /urge\s+(dhs|uscis)\s+to\s+(withdraw|reject|keep|retain)/i
-  ];
-
-  const supportPatterns = [
-    /support\s+(eliminating|removing|ending)\s+the\s+(discretionary\s+)?(60-day\s+)?grace\s+period/i,
-    /in\s+favor\s+of\s+(ending|eliminating|removing)\s+the\s+(60[\s-]day\s+)?grace\s+period/i,
-    /finalize\s+elimination\s+of\s+the\s+60-day\s+grace\s+period/i,
-    /support\s+(this|the)\s+proposed\s+rule/i,
-    /end\s+the\s+(60[\s-]day\s+)?grace\s+period/i,
-    /american\s+jobs\s+for\s+americans/i,
-    /end\s+h-?1b/i
-  ];
-
-  for (const pat of opposePatterns) {
-    if (pat.test(combined)) {
-      return {
-        stance: 'Oppose',
-        reason: 'Opposes eliminating the 60-day grace period and urges DHS to retain transition flexibility.'
-      };
-    }
-  }
-
-  for (const pat of supportPatterns) {
-    if (pat.test(combined)) {
-      return {
-        stance: 'Support',
-        reason: 'Supports the proposed rule to eliminate the 60-day discretionary grace period.'
-      };
-    }
-  }
-
-  if (combined.includes('oppose') && !combined.includes('support eliminating')) {
-    return { stance: 'Oppose', reason: 'Expresses opposition to removing the 60-day grace period.' };
-  }
-  if (combined.includes('support') && !combined.includes('support the 60-day grace period')) {
-    return { stance: 'Support', reason: 'Expresses support for the DHS proposed rulemaking.' };
-  }
-
-  return {
-    stance: "Can't tell",
-    reason: 'Comment text is brief, attachment-only, or does not state a clear stance.'
-  };
-}
-
-async function classifyBatchWithGeminiBrowser(
-  geminiKey: string,
-  items: Array<{ id: string; title: string; commentText: string }>
-): Promise<Map<string, { stance: Stance; reason: string; classifiedBy: 'gemini' | 'heuristic' }>> {
-  const result = new Map<string, { stance: Stance; reason: string; classifiedBy: 'gemini' | 'heuristic' }>();
-  if (items.length === 0) return result;
-
-  if (!geminiKey) {
-    for (const item of items) {
-      const h = classifyHeuristicBrowser(item.commentText, item.title);
-      result.set(item.id, { ...h, classifiedBy: 'heuristic' });
-    }
-    return result;
-  }
-
-  const prompt = `Classify public comments on DHS/USCIS Proposed Rule USCIS-2026-0364-0001 ("Eliminating the Discretionary 60-Day Grace Period").
-The rule ELIMINATES the up-to-60-day grace period for E-1, E-2, E-3, H-1B, H-1B1, L-1, O-1, and TN workers after employment ends.
-Labels:
-- "Support": Supports the proposed rule (wants to eliminate or shorten the 60-day grace period).
-- "Oppose": Opposes the proposed rule (wants to retain/keep the 60-day grace period).
-- "Can't tell": Rarely used; only when stance cannot be determined from the text.
-
-Return a JSON array of objects: [{"id": "...", "stance": "Support"|"Oppose"|"Can't tell", "reason": "1 short sentence"}].
-
-Comments:
-${JSON.stringify(items)}`;
-
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: 'application/json'
-          }
-        })
-      }
-    );
-
-    if (!res.ok) {
-      throw new Error(`Gemini HTTP ${res.status}`);
-    }
-
-    const data = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-    const parsed = JSON.parse(raw) as Array<{ id: string; stance: Stance; reason: string }>;
-    for (const p of parsed) {
-      const stance: Stance =
-        p.stance === 'Support' || p.stance === 'Oppose' || p.stance === "Can't tell"
-          ? p.stance
-          : "Can't tell";
-      result.set(p.id, {
-        stance,
-        reason: p.reason || 'Classified by Gemini.',
-        classifiedBy: 'gemini'
-      });
-    }
-  } catch (err) {
-    console.warn('Gemini browser classification fallback:', err);
-  }
-
-  for (const item of items) {
-    if (!result.has(item.id)) {
-      const h = classifyHeuristicBrowser(item.commentText, item.title);
-      result.set(item.id, { ...h, classifiedBy: 'heuristic' });
-    }
-  }
-
-  return result;
-}
-
-function updateCountdown(): void {
-  const el = document.getElementById('countdown-timer');
-  const badgeEl = document.getElementById('status-badge');
-  if (!el || !badgeEl) return;
-
-  const now = Date.now();
-  const diff = DEADLINE_MS - now;
-
-  if (diff <= 0) {
-    el.textContent = 'Comment Period Closed (Ended Nov 10, 2026 11:59 PM EST)';
-    badgeEl.textContent = 'Closed';
-    badgeEl.className = 'badge badge-closed';
-    return;
-  }
-
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-  const mins = Math.floor((diff / (1000 * 60)) % 60);
-  const secs = Math.floor((diff / 1000) % 60);
-
-  el.textContent = `${days}d ${hours}h ${mins}m ${secs}s remaining`;
-  badgeEl.textContent = 'Open for Comment';
-  badgeEl.className = 'badge badge-open';
-}
-
-function renderDashboard(): void {
-  if (!state) return;
-
-  const totalClassified =
-    state.counts.Support + state.counts.Oppose + state.counts["Can't tell"];
-
-  const setTxt = (id: string, text: string) => {
-    const node = document.getElementById(id);
-    if (node) node.textContent = text;
-  };
-
-  setTxt('kpi-total', formatNumber(state.totalPublishedOnDocket));
-  setTxt('kpi-indexed', `${formatNumber(state.totalIndexedInTracker)} indexed & classified`);
-
-  setTxt('kpi-support', formatNumber(state.counts.Support));
-  setTxt('kpi-support-pct', formatPercent(state.counts.Support, totalClassified));
-
-  setTxt('kpi-oppose', formatNumber(state.counts.Oppose));
-  setTxt('kpi-oppose-pct', formatPercent(state.counts.Oppose, totalClassified));
-
-  setTxt('kpi-cant-tell', formatNumber(state.counts["Can't tell"]));
-  setTxt('kpi-cant-tell-pct', formatPercent(state.counts["Can't tell"], totalClassified));
-
-  const syncDate = new Date(state.lastSyncedAt);
-  setTxt(
-    'last-synced',
-    `Last synced: ${syncDate.toLocaleString('en-US', {
-      month: 'short',
+  if (style === 'deadline') {
+    return date.toLocaleString('en-US', {
+      month: 'long',
       day: 'numeric',
       year: 'numeric',
       hour: 'numeric',
-      minute: '2-digit'
-    })}`
-  );
-
-  // Stacked progress bar widths
-  const barSupport = document.getElementById('bar-support') as HTMLElement | null;
-  const barOppose = document.getElementById('bar-oppose') as HTMLElement | null;
-  const barCantTell = document.getElementById('bar-cant-tell') as HTMLElement | null;
-
-  if (barSupport && barOppose && barCantTell && totalClassified > 0) {
-    barSupport.style.width = `${(state.counts.Support / totalClassified) * 100}%`;
-    barOppose.style.width = `${(state.counts.Oppose / totalClassified) * 100}%`;
-    barCantTell.style.width = `${(state.counts["Can't tell"] / totalClassified) * 100}%`;
+      minute: '2-digit',
+      timeZone: DEADLINE_TIME_ZONE,
+      timeZoneName: 'short'
+    });
   }
 
-  // Render Mass Mail Campaign breakdown
-  const campaignBody = document.getElementById('campaign-table-body');
-  if (campaignBody) {
-    campaignBody.innerHTML = state.campaigns
-      .map(
-        (c) => `
-      <tr>
-        <td><strong>${escapeHtml(c.label)}</strong></td>
-        <td><span class="stance-pill stance-${stanceSlug(c.stance)}">${escapeHtml(c.stance)}</span></td>
-        <td class="num-col"><strong>${formatNumber(c.count)}</strong> (${formatPercent(c.count, state!.totalPublishedOnDocket)})</td>
-        <td class="excerpt-col">"${escapeHtml(c.sampleExcerpt)}"</td>
-        <td><a href="${escapeHtml(c.sampleUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.sampleId)} ↗</a></td>
-      </tr>`
-      )
-      .join('');
-  }
-
-  renderCommentsTable();
-}
-
-function stanceSlug(s: Stance): string {
-  if (s === 'Support') return 'support';
-  if (s === 'Oppose') return 'oppose';
-  return 'cant-tell';
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function renderCommentsTable(): void {
-  if (!state) return;
-  const tbody = document.getElementById('comments-table-body');
-  const countLabel = document.getElementById('filtered-count-label');
-  if (!tbody) return;
-
-  const q = searchQuery.trim().toLowerCase();
-
-  const filtered = state.comments.filter((c) => {
-    if (activeStanceFilter !== 'ALL' && c.stance !== activeStanceFilter) return false;
-    if (activeSourceFilter === 'INDIVIDUAL' && c.campaignId !== null) return false;
-    if (
-      activeSourceFilter !== 'ALL' &&
-      activeSourceFilter !== 'INDIVIDUAL' &&
-      c.campaignId !== activeSourceFilter
-    ) {
-      return false;
-    }
-    if (q) {
-      const hay = `${c.id} ${c.title} ${c.submitterName} ${c.commentText} ${c.reason}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
+  const base = date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: DEADLINE_TIME_ZONE
   });
 
-  if (countLabel) {
-    countLabel.textContent = `Showing ${formatNumber(filtered.length)} of ${formatNumber(state.comments.length)} detailed sample/indexed comments`;
-  }
+  return style === 'synced' ? `${base} ET` : `${base} ET`;
+}
 
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty-cell">No comments match the current filter.</td></tr>`;
+function setText(id: string, text: string): void {
+  const element = byId<HTMLElement>(id);
+  if (element) element.textContent = text;
+}
+
+/* — countdown — */
+
+function tick(deadlineMs: number): void {
+  const root = byId<HTMLElement>('countdown');
+  if (!root) return;
+
+  const remaining = deadlineMs - Date.now();
+
+  if (remaining <= 0) {
+    root.classList.add('is-closed');
+    root.removeAttribute('role');
+    if (timerHandle !== undefined) window.clearInterval(timerHandle);
+    timerHandle = undefined;
     return;
   }
 
-  tbody.innerHTML = filtered
-    .slice(0, 250)
-    .map((c) => {
-      const dateStr = c.postedDate ? c.postedDate.slice(0, 10) : '—';
-      const campaignBadge = c.campaignId
-        ? `<span class="campaign-tag">${escapeHtml(c.campaignId)}</span>`
-        : `<span class="campaign-tag campaign-individual">Individual</span>`;
+  const totalSeconds = Math.floor(remaining / 1000);
+  const values: Record<string, string> = {
+    d: formatCount(Math.floor(totalSeconds / 86400)),
+    h: pad(Math.floor((totalSeconds % 86400) / 3600)),
+    m: pad(Math.floor((totalSeconds % 3600) / 60)),
+    s: pad(totalSeconds % 60)
+  };
 
-      return `
-      <tr>
-        <td class="id-col">
-          <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(c.id)} ↗</a>
-          <div class="meta-sub">${escapeHtml(dateStr)} · ${escapeHtml(c.submitterName)}</div>
-        </td>
-        <td>${campaignBadge}</td>
-        <td>
-          <span class="stance-pill stance-${stanceSlug(c.stance)}">${escapeHtml(c.stance)}</span>
-          <div class="meta-sub">via ${escapeHtml(c.classifiedBy)}</div>
-        </td>
-        <td class="comment-text-col">${escapeHtml(c.commentText || c.title)}</td>
-        <td class="reason-col">${escapeHtml(c.reason)}</td>
-      </tr>`;
-    })
+  root.querySelectorAll<HTMLElement>('[data-unit]').forEach((node) => {
+    const key = node.dataset.unit || '';
+    const next = values[key];
+    if (next !== undefined && node.textContent !== next) {
+      node.textContent = next;
+    }
+  });
+}
+
+function startTimer(deadlineMs: number): void {
+  if (timerHandle !== undefined) window.clearInterval(timerHandle);
+  tick(deadlineMs);
+  timerHandle = window.setInterval(() => tick(deadlineMs), 1000);
+}
+
+/* — the count — */
+
+function renderCounts(summary: TrackerSummary): void {
+  const counts = summary.counts || {};
+  const support = counts.Support || 0;
+  const oppose = counts.Oppose || 0;
+  const cantTell = counts["Can't tell"] || 0;
+  const total =
+    summary.totalPublishedOnDocket || summary.totalIndexedInTracker || support + oppose + cantTell;
+
+  if (total <= 0) return;
+
+  setText('n-total', formatCount(total));
+  setText('n-support', formatCount(support));
+  setText('n-oppose', formatCount(oppose));
+  setText('n-cant', formatCount(cantTell));
+
+  const share = (value: number): number => (value / total) * 100;
+
+  // Let the browser paint the zero-width bar first so the fill animates in.
+  window.requestAnimationFrame(() => {
+    const setWidth = (id: string, percent: number): void => {
+      const element = byId<HTMLElement>(id);
+      if (element) element.style.width = `${percent.toFixed(3)}%`;
+    };
+    setWidth('bar-support', share(support));
+    setWidth('bar-oppose', share(oppose));
+    setWidth('bar-cant', share(cantTell));
+  });
+
+  const bar = byId<HTMLElement>('bar');
+  if (bar) {
+    bar.setAttribute(
+      'aria-label',
+      `Of ${formatCount(total)} comments: ${formatCount(support)} support, ` +
+        `${formatCount(oppose)} oppose, ${formatCount(cantTell)} can't tell.`
+    );
+  }
+}
+
+/* — history: line chart — */
+
+function niceCeil(value: number): number {
+  if (value <= 0) return 1;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  const normalized = value / magnitude;
+  const steps = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  const step = steps.find((candidate) => normalized <= candidate) ?? 10;
+  return step * magnitude;
+}
+
+function setChartChromeVisible(visible: boolean): void {
+  const cap = byId<HTMLElement>('chart-cap');
+  if (cap) cap.hidden = !visible;
+  const toggle = byId<HTMLElement>('chart-toggle');
+  if (toggle) toggle.hidden = !visible;
+}
+
+function renderLineChart(): void {
+  const host = byId<HTMLElement>('line-chart');
+  if (!host) return;
+
+  setChartChromeVisible(historyPoints.length > 1);
+
+  if (historyPoints.length === 0) {
+    host.classList.add('is-empty');
+    host.innerHTML = '';
+    return;
+  }
+
+  // A single observation is not a line. Say so plainly instead of drawing
+  // three floating dots that look like a broken chart.
+  if (historyPoints.length === 1) {
+    host.classList.add('is-empty');
+    host.innerHTML =
+      `<p class="chart-empty">No history yet. The first snapshot was recorded ` +
+      `${formatInEastern(historyPoints[0].t, 'point')}, and a new point is added every six hours.</p>`;
+    host.setAttribute('aria-label', 'No history yet; one snapshot recorded.');
+    return;
+  }
+
+  host.classList.remove('is-empty');
+
+  const width = Math.max(260, Math.round(host.clientWidth || 320));
+  const height = Math.round(host.clientHeight || 190);
+  const padL = 38;
+  const padR = 10;
+  const padT = 10;
+  const padB = 20;
+  const innerW = Math.max(1, width - padL - padR);
+  const innerH = Math.max(1, height - padT - padB);
+
+  const count = historyPoints.length;
+  const firstAt = new Date(historyPoints[0].t).getTime();
+  const lastAt = new Date(historyPoints[count - 1].t).getTime();
+  const span = Math.max(1, lastAt - firstAt);
+
+  const pctMode = chartMode === 'pct';
+  const peak = Math.max(
+    ...historyPoints.map((p) => Math.max(p.support, p.oppose, p.cantTell)),
+    1
+  );
+  const yMax = pctMode ? 100 : niceCeil(peak);
+
+  const xOf = (time: number): number => {
+    if (count === 1) return padL + innerW / 2;
+    return padL + ((time - firstAt) / span) * innerW;
+  };
+
+  const yOf = (value: number): number => padT + innerH - (value / yMax) * innerH;
+
+  const valueOf = (point: HistoryPoint, key: 'support' | 'oppose' | 'cantTell'): number => {
+    const raw = point[key];
+    if (!pctMode) return raw;
+    return point.total > 0 ? (raw / point.total) * 100 : 0;
+  };
+
+  const parts: string[] = [];
+  parts.push(
+    `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="presentation" focusable="false">`
+  );
+
+  for (const fraction of [0, 0.5, 1]) {
+    const y = padT + innerH * fraction;
+    const value = yMax * (1 - fraction);
+    const label = pctMode ? `${Math.round(value)}%` : formatCount(Math.round(value));
+    parts.push(
+      `<line class="grid" x1="${padL}" y1="${y.toFixed(1)}" x2="${(width - padR).toFixed(1)}" y2="${y.toFixed(1)}" />`
+    );
+    parts.push(
+      `<text class="tick" x="${(padL - 9).toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="end">${label}</text>`
+    );
+  }
+
+  const series: Array<{ key: 'support' | 'oppose' | 'cantTell'; cls: string }> = [
+    { key: 'support', cls: 's-support' },
+    { key: 'oppose', cls: 's-oppose' },
+    { key: 'cantTell', cls: 's-cant' }
+  ];
+
+  if (count > 1 && historyPoints[selectedIndex]) {
+    const markerX = xOf(new Date(historyPoints[selectedIndex].t).getTime());
+    parts.push(
+      `<line class="marker" x1="${markerX.toFixed(1)}" y1="${padT}" x2="${markerX.toFixed(1)}" y2="${(padT + innerH).toFixed(1)}" />`
+    );
+  }
+
+  for (const item of series) {
+    const coords = historyPoints.map((point) => {
+      const time = new Date(point.t).getTime();
+      return `${xOf(time).toFixed(1)},${yOf(valueOf(point, item.key)).toFixed(1)}`;
+    });
+
+    if (count > 1) {
+      parts.push(`<polyline class="line ${item.cls}" points="${coords.join(' ')}" />`);
+    }
+
+    const terminal = coords[coords.length - 1].split(',');
+    parts.push(
+      `<circle class="point ${item.cls}" cx="${terminal[0]}" cy="${terminal[1]}" r="${count > 1 ? 2.6 : 3.4}" />`
+    );
+
+    if (count > 1 && selectedIndex !== count - 1) {
+      const selected = historyPoints[selectedIndex];
+      const sx = xOf(new Date(selected.t).getTime()).toFixed(1);
+      const sy = yOf(valueOf(selected, item.key)).toFixed(1);
+      parts.push(`<circle class="point ${item.cls}" cx="${sx}" cy="${sy}" r="3" />`);
+    }
+  }
+
+  const labelY = height - 4;
+  if (count === 1) {
+    parts.push(
+      `<text class="tick" x="${(padL + innerW / 2).toFixed(1)}" y="${labelY}" text-anchor="middle">${formatInEastern(historyPoints[0].t, 'day')}</text>`
+    );
+  } else {
+    parts.push(
+      `<text class="tick" x="${padL}" y="${labelY}" text-anchor="start">${formatInEastern(historyPoints[0].t, 'day')}</text>`
+    );
+    parts.push(
+      `<text class="tick" x="${(width - padR).toFixed(1)}" y="${labelY}" text-anchor="end">${formatInEastern(historyPoints[count - 1].t, 'day')}</text>`
+    );
+  }
+
+  parts.push('</svg>');
+  host.innerHTML = parts.join('');
+  host.setAttribute(
+    'aria-label',
+    `Support and oppose share of comments over ${count} snapshots. Latest: ` +
+      `${formatCount(historyPoints[count - 1].support)} support, ` +
+      `${formatCount(historyPoints[count - 1].oppose)} oppose.`
+  );
+}
+
+/* — history: donut + timeline — */
+
+function renderDonut(point: HistoryPoint): void {
+  const host = byId<HTMLElement>('donut');
+  if (!host) return;
+
+  const size = 132;
+  const radius = 52;
+  const thickness = 11;
+  const circumference = 2 * Math.PI * radius;
+  const total = point.total || 1;
+
+  const arcs = [
+    { value: point.support, cls: 's-support' },
+    { value: point.oppose, cls: 's-oppose' },
+    { value: point.cantTell, cls: 's-cant' }
+  ];
+
+  let offset = 0;
+  const slices = arcs.map((arc) => {
+    const length = (arc.value / total) * circumference;
+    const slice =
+      `<circle class="arc ${arc.cls}" cx="${size / 2}" cy="${size / 2}" r="${radius}" ` +
+      `stroke-dasharray="${length.toFixed(2)} ${(circumference - length).toFixed(2)}" ` +
+      `stroke-dashoffset="${(-offset).toFixed(2)}" ` +
+      `transform="rotate(-90 ${size / 2} ${size / 2})" />`;
+    offset += length;
+    return slice;
+  });
+
+  host.innerHTML =
+    `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true" focusable="false">` +
+    `<circle class="arc-track" cx="${size / 2}" cy="${size / 2}" r="${radius}" />` +
+    slices.join('') +
+    `<text class="num" x="${size / 2}" y="${size / 2 + 2}" text-anchor="middle">${formatCount(point.total)}</text>` +
+    `<text class="sub" x="${size / 2}" y="${size / 2 + 15}" text-anchor="middle">comments</text>` +
+    `</svg>`;
+
+  host.setAttribute(
+    'aria-label',
+    `${formatCount(point.support)} support, ${formatCount(point.oppose)} oppose, ` +
+      `${formatCount(point.cantTell)} can't tell, as of ${formatInEastern(point.t, 'point')}.`
+  );
+}
+
+function renderDonutLegend(point: HistoryPoint): void {
+  const host = byId<HTMLElement>('donut-legend');
+  if (!host) return;
+
+  const total = point.total || 1;
+  const rows = [
+    { label: 'Support', value: point.support, cls: 'dot-support' },
+    { label: 'Oppose', value: point.oppose, cls: 'dot-oppose' },
+    { label: "Can't tell", value: point.cantTell, cls: 'dot-cant' }
+  ];
+
+  host.innerHTML = rows
+    .map(
+      (row) =>
+        `<div class="row">` +
+        `<dt><i class="dot ${row.cls}"></i>${row.label}</dt>` +
+        `<dd>${formatCount(row.value)}<span class="pct">${((row.value / total) * 100).toFixed(1)}%</span></dd>` +
+        `</div>`
+    )
     .join('');
 }
 
-function setSyncStatus(msg: string, isError = false): void {
-  const el = document.getElementById('sync-status-log');
-  if (!el) return;
-  el.textContent = msg;
-  el.className = isError ? 'sync-log sync-log-error' : 'sync-log';
-}
+function updateTimelineLabel(): void {
+  const label = byId<HTMLElement>('timeline-range');
+  if (!label) return;
 
-function formatRegulationsDate(isoDate: string): string {
-  const d = new Date(isoDate);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
-}
-
-async function runBrowserLiveSync(fetchAllWindows: boolean): Promise<void> {
-  if (isSyncing || !state) return;
-
-  const regInput = document.getElementById('input-reg-key') as HTMLInputElement | null;
-  const geminiInput = document.getElementById('input-gemini-key') as HTMLInputElement | null;
-
-  const regKey = (regInput?.value || '').trim();
-  const geminiKey = (geminiInput?.value || '').trim();
-
-  if (!regKey) {
-    setSyncStatus('Please enter your Regulations.gov (data.gov) API key first.', true);
+  const count = historyPoints.length;
+  if (count === 0) {
+    label.textContent = '—';
     return;
   }
 
-  localStorage.setItem(STORAGE_KEY_REG_API, regKey);
-  if (geminiKey) localStorage.setItem(STORAGE_KEY_GEMINI_API, geminiKey);
-
-  isSyncing = true;
-  try {
-    setSyncStatus('Step 1/3: Resolving document objectId from Regulations.gov v4 API...');
-    const docRes = await fetch(
-      `https://api.regulations.gov/v4/documents/${state.documentId}?api_key=${encodeURIComponent(regKey)}`
-    );
-    if (!docRes.ok) {
-      throw new Error(`Regulations.gov document lookup returned HTTP ${docRes.status}`);
-    }
-    const docJson = (await docRes.json()) as {
-      data?: { attributes?: { objectId?: string } };
-    };
-    const objectId = docJson.data?.attributes?.objectId;
-    if (!objectId) {
-      throw new Error('Could not find objectId on document response.');
-    }
-
-    const commentMap = new Map<string, CommentRecord>();
-    for (const c of state.comments) {
-      commentMap.set(c.id, c);
-    }
-
-    const maxWindows = fetchAllWindows ? 8 : 1;
-    const maxPagesPerWindow = fetchAllWindows ? 20 : 2;
-    let windowGe = fetchAllWindows ? '2026-09-11 00:00:00' : state.lastModifiedCursor || '2026-09-11 00:00:00';
-    let keepPaging = true;
-    let reportedTotal = state.totalPublishedOnDocket;
-
-    const campaignCounter = new Map<string, number>();
-    const stanceCounter: Record<Stance, number> = {
-      Support: 0,
-      Oppose: 0,
-      "Can't tell": 0
-    };
-    let totalSeenInRun = 0;
-
-    for (let w = 1; w <= maxWindows && keepPaging; w++) {
-      let lastDateInWindow: string | null = null;
-      for (let page = 1; page <= maxPagesPerWindow; page++) {
-        setSyncStatus(
-          `Step 2/3: Fetching comments window ${w}/${maxWindows}, page ${page}/${maxPagesPerWindow} (sliding window >= ${windowGe})...`
-        );
-        const url = new URL('https://api.regulations.gov/v4/comments');
-        url.searchParams.set('filter[commentOnId]', objectId);
-        if (fetchAllWindows) {
-          url.searchParams.set('filter[lastModifiedDate][ge]', windowGe);
-          url.searchParams.set('sort', 'lastModifiedDate,documentId');
-        } else {
-          url.searchParams.set('sort', '-postedDate');
-        }
-        url.searchParams.set('page[size]', '250');
-        url.searchParams.set('page[number]', String(page));
-        url.searchParams.set('api_key', regKey);
-
-        const listRes = await fetch(url.toString());
-        if (listRes.status === 429) {
-          setSyncStatus('Reached Regulations.gov hourly rate limit; classifying fetched batch...', true);
-          keepPaging = false;
-          break;
-        }
-        if (!listRes.ok) {
-          throw new Error(`Comments list endpoint returned HTTP ${listRes.status}`);
-        }
-
-        const listJson = (await listRes.json()) as {
-          data?: Array<{
-            id: string;
-            attributes?: {
-              title?: string;
-              postedDate?: string;
-              lastModifiedDate?: string;
-              withdrawn?: boolean;
-            };
-          }>;
-          meta?: { totalElements?: number; hasNextPage?: boolean };
-        };
-
-        if (w === 1 && page === 1 && listJson.meta?.totalElements) {
-          reportedTotal = listJson.meta.totalElements;
-        }
-
-        const rows = listJson.data || [];
-        if (rows.length === 0) {
-          keepPaging = false;
-          break;
-        }
-
-        for (const r of rows) {
-          if (r.attributes?.withdrawn) continue;
-          const title = r.attributes?.title || `Comment ${r.id}`;
-          const campaignId = detectCampaignId(title);
-          const h = classifyHeuristicBrowser('', title);
-
-          totalSeenInRun++;
-          if (campaignId) {
-            campaignCounter.set(campaignId, (campaignCounter.get(campaignId) || 0) + 1);
-          }
-          stanceCounter[h.stance]++;
-
-          if (!commentMap.has(r.id)) {
-            commentMap.set(r.id, {
-              id: r.id,
-              title,
-              submitterName: extractSubmitter(title),
-              postedDate: r.attributes?.postedDate || '',
-              lastModifiedDate: r.attributes?.lastModifiedDate || '',
-              campaignId,
-              commentText: '',
-              stance: h.stance,
-              reason: h.reason,
-              classifiedBy: campaignId ? 'campaign-template' : 'heuristic',
-              url: `https://www.regulations.gov/comment/${r.id}`
-            });
-          }
-          if (r.attributes?.lastModifiedDate) {
-            lastDateInWindow = r.attributes.lastModifiedDate;
-          }
-        }
-
-        if (!listJson.meta?.hasNextPage || rows.length < 250) {
-          keepPaging = false;
-          break;
-        }
-      }
-
-      if (keepPaging && lastDateInWindow) {
-        windowGe = formatRegulationsDate(lastDateInWindow);
-      } else {
-        break;
-      }
-    }
-
-    // Fetch details for up to 15 new individual or representative comments to classify with Gemini in-browser
-    const needsDetail = Array.from(commentMap.values())
-      .filter((c) => !c.commentText)
-      .slice(0, 15);
-
-    if (needsDetail.length > 0) {
-      setSyncStatus(`Step 3/3: Fetching full text for ${needsDetail.length} new comments & classifying with Gemini...`);
-      for (const item of needsDetail) {
-        const dRes = await fetch(
-          `https://api.regulations.gov/v4/comments/${item.id}?api_key=${encodeURIComponent(regKey)}`
-        );
-        if (!dRes.ok) continue;
-        const dJson = (await dRes.json()) as {
-          data?: { attributes?: { comment?: string; firstName?: string; lastName?: string; organization?: string } };
-        };
-        const attr = dJson.data?.attributes;
-        item.commentText = (attr?.comment || '').trim();
-        const name = [attr?.firstName, attr?.lastName].filter(Boolean).join(' ').trim();
-        if (attr?.organization) item.submitterName = attr.organization;
-        else if (name) item.submitterName = name;
-      }
-
-      const classified = await classifyBatchWithGeminiBrowser(
-        geminiKey,
-        needsDetail.map((c) => ({ id: c.id, title: c.title, commentText: c.commentText }))
-      );
-      for (const item of needsDetail) {
-        const cRes = classified.get(item.id);
-        if (cRes) {
-          item.stance = cRes.stance;
-          item.reason = cRes.reason;
-          item.classifiedBy = cRes.classifiedBy;
-        }
-      }
-    }
-
-    const mergedComments = Array.from(commentMap.values()).sort((a, b) =>
-      b.postedDate.localeCompare(a.postedDate)
-    );
-
-    if (fetchAllWindows && totalSeenInRun > 0) {
-      state.counts = stanceCounter;
-      state.totalIndexedInTracker = totalSeenInRun;
-    }
-
-    state.totalPublishedOnDocket = Math.max(reportedTotal, state.totalPublishedOnDocket);
-    state.lastSyncedAt = new Date().toISOString();
-    state.comments = mergedComments.slice(0, 500);
-
-    localStorage.setItem(STORAGE_KEY_SNAPSHOT, JSON.stringify(state));
-    renderDashboard();
-    setSyncStatus(
-      `Sync complete! Indexed ${formatNumber(mergedComments.length)} comments (Docket total: ${formatNumber(
-        state.totalPublishedOnDocket
-      )}).`
-    );
-  } catch (err) {
-    setSyncStatus(`Sync error: ${(err as Error).message}`, true);
-  } finally {
-    isSyncing = false;
-  }
+  const point = historyPoints[selectedIndex];
+  label.textContent =
+    count === 1
+      ? '1 snapshot'
+      : `${selectedIndex + 1} / ${count} · ${formatInEastern(point.t, 'day')}`;
 }
 
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current);
-  return result;
+function updateShareBlock(): void {
+  const point = historyPoints[selectedIndex];
+  if (!point) return;
+
+  renderDonut(point);
+  renderDonutLegend(point);
+  setText('donut-date', formatInEastern(point.t, 'point'));
+  updateTimelineLabel();
 }
 
-async function handleCsvUpload(file: File): Promise<void> {
-  if (!state) return;
-  const geminiInput = document.getElementById('input-gemini-key') as HTMLInputElement | null;
-  const geminiKey = (geminiInput?.value || '').trim();
+function renderHistoryStatus(): void {
+  const element = byId<HTMLElement>('history-status');
+  if (!element) return;
 
-  setSyncStatus(`Reading bulk CSV file "${file.name}"...`);
-  const text = await file.text();
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length < 2) {
-    setSyncStatus('CSV file appears empty.', true);
-    return;
-  }
+  const count = historyPoints.length;
+  element.textContent = count < 2 ? '' : `${count} snapshots · one every six hours`;
+}
 
-  const headers = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
-  const idIdx = headers.findIndex((h) => h.includes('document id') || h === 'id' || h === 'commentid');
-  const titleIdx = headers.findIndex((h) => h.includes('title'));
-  const commentIdx = headers.findIndex((h) => h === 'comment' || h.includes('comment text'));
-  const postedIdx = headers.findIndex((h) => h.includes('posted'));
+/* — wiring — */
 
-  const newRecords: CommentRecord[] = [];
-  const counts: Record<Stance, number> = { Support: 0, Oppose: 0, "Can't tell": 0 };
+function wireTimeline(): void {
+  const slider = byId<HTMLInputElement>('timeline');
+  if (!slider) return;
 
-  for (let i = 1; i < lines.length; i++) {
-    const cols = parseCsvLine(lines[i]);
-    const id = (idIdx >= 0 ? cols[idIdx] : `CSV-ROW-${i}`) || `CSV-ROW-${i}`;
-    const title = (titleIdx >= 0 ? cols[titleIdx] : 'Public Submission') || 'Public Submission';
-    const body = (commentIdx >= 0 ? cols[commentIdx] : '') || '';
-    const postedDate = (postedIdx >= 0 ? cols[postedIdx] : new Date().toISOString()) || '';
-    const campaignId = detectCampaignId(title);
-    const h = classifyHeuristicBrowser(body, title);
-    counts[h.stance]++;
+  slider.max = String(Math.max(0, historyPoints.length - 1));
+  slider.value = String(selectedIndex);
+  slider.disabled = historyPoints.length < 2;
 
-    if (newRecords.length < 300) {
-      newRecords.push({
-        id,
-        title,
-        submitterName: extractSubmitter(title),
-        postedDate,
-        lastModifiedDate: postedDate,
-        campaignId,
-        commentText: body,
-        stance: h.stance,
-        reason: h.reason,
-        classifiedBy: campaignId ? 'campaign-template' : 'heuristic',
-        url: `https://www.regulations.gov/comment/${id}`
+  const row = slider.closest('.slider-row');
+  if (row instanceof HTMLElement) row.hidden = historyPoints.length < 2;
+
+  slider.addEventListener('input', () => {
+    const next = Number(slider.value);
+    const bounded = Number.isFinite(next) ? Math.min(historyPoints.length - 1, Math.max(0, next)) : 0;
+    selectedIndex = bounded;
+    updateShareBlock();
+    renderLineChart();
+  });
+}
+
+function wireChartToggle(): void {
+  const buttons = document.querySelectorAll<HTMLButtonElement>('.toggle-btn[data-mode]');
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      chartMode = button.dataset.mode === 'count' ? 'count' : 'pct';
+      buttons.forEach((peer) => {
+        const active = peer === button;
+        peer.classList.toggle('is-active', active);
+        peer.setAttribute('aria-pressed', String(active));
       });
-    }
-  }
-
-  // If Gemini key is provided, refine the first 25 individual comments with Gemini
-  if (geminiKey) {
-    const sampleToRefine = newRecords.filter((r) => !r.campaignId && r.commentText).slice(0, 25);
-    if (sampleToRefine.length > 0) {
-      setSyncStatus(`Classifying ${sampleToRefine.length} unique comments with Gemini...`);
-      const refined = await classifyBatchWithGeminiBrowser(
-        geminiKey,
-        sampleToRefine.map((r) => ({ id: r.id, title: r.title, commentText: r.commentText }))
-      );
-      for (const r of sampleToRefine) {
-        const res = refined.get(r.id);
-        if (res) {
-          counts[r.stance]--;
-          r.stance = res.stance;
-          r.reason = res.reason;
-          r.classifiedBy = res.classifiedBy;
-          counts[r.stance]++;
-        }
-      }
-    }
-  }
-
-  state.counts = counts;
-  state.totalIndexedInTracker = lines.length - 1;
-  state.totalPublishedOnDocket = Math.max(state.totalPublishedOnDocket, lines.length - 1);
-  state.comments = newRecords;
-  state.lastSyncedAt = new Date().toISOString();
-
-  localStorage.setItem(STORAGE_KEY_SNAPSHOT, JSON.stringify(state));
-  renderDashboard();
-  setSyncStatus(`Imported and classified ${formatNumber(lines.length - 1)} comments from ${file.name}.`);
+      renderLineChart();
+    });
+  });
 }
 
-function downloadSnapshotJson(): void {
-  if (!state) return;
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `USCIS-2026-0364-0001-summary-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+function observeChartResize(): void {
+  const host = byId<HTMLElement>('line-chart');
+  if (!host || typeof ResizeObserver === 'undefined') return;
+
+  let frame = 0;
+  const observer = new ResizeObserver(() => {
+    window.cancelAnimationFrame(frame);
+    frame = window.requestAnimationFrame(() => renderLineChart());
+  });
+  observer.observe(host);
+}
+
+/* — data — */
+
+async function loadSummary(): Promise<TrackerSummary> {
+  try {
+    const response = await fetch('./data/summary.json', { cache: 'no-store' });
+    if (!response.ok) return {};
+    return (await response.json()) as TrackerSummary;
+  } catch (error) {
+    console.warn('Comment snapshot unavailable; showing an empty page.', error);
+    return {};
+  }
+}
+
+async function loadHistory(summary: TrackerSummary): Promise<HistoryPoint[]> {
+  try {
+    const response = await fetch('./data/history.json', { cache: 'no-store' });
+    if (response.ok) {
+      const data = (await response.json()) as { points?: HistoryPoint[] };
+      const points = (data.points || [])
+        .filter((point) => point && typeof point.t === 'string')
+        .sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
+      if (points.length > 0) return points;
+    }
+  } catch (error) {
+    console.warn('History snapshot unavailable.', error);
+  }
+
+  // Before the first history write, fall back to the single current snapshot.
+  const counts = summary.counts || {};
+  const total = summary.totalPublishedOnDocket || summary.totalIndexedInTracker || 0;
+  if (total <= 0) return [];
+
+  return [
+    {
+      t: summary.lastSyncedAt || new Date().toISOString(),
+      support: counts.Support || 0,
+      oppose: counts.Oppose || 0,
+      cantTell: counts["Can't tell"] || 0,
+      total
+    }
+  ];
 }
 
 async function init(): Promise<void> {
-  updateCountdown();
-  setInterval(updateCountdown, 1000);
+  startTimer(new Date(FALLBACK_DEADLINE_ISO).getTime());
 
-  // Restore saved API keys in browser
-  const regInput = document.getElementById('input-reg-key') as HTMLInputElement | null;
-  const geminiInput = document.getElementById('input-gemini-key') as HTMLInputElement | null;
-  if (regInput) regInput.value = localStorage.getItem(STORAGE_KEY_REG_API) || '';
-  if (geminiInput) geminiInput.value = localStorage.getItem(STORAGE_KEY_GEMINI_API) || '';
+  const summary = await loadSummary();
 
-  // Load initial summary.json or cached localStorage snapshot
-  try {
-    const res = await fetch('./data/summary.json');
-    const fileData = (await res.json()) as TrackerSummary;
-    const cachedRaw = localStorage.getItem(STORAGE_KEY_SNAPSHOT);
-    if (cachedRaw) {
-      const cached = JSON.parse(cachedRaw) as TrackerSummary;
-      state =
-        new Date(cached.lastSyncedAt).getTime() > new Date(fileData.lastSyncedAt).getTime()
-          ? cached
-          : fileData;
-    } else {
-      state = fileData;
+  if (summary.deadlineIso) {
+    const deadlineMs = new Date(summary.deadlineIso).getTime();
+    if (!Number.isNaN(deadlineMs)) {
+      startTimer(deadlineMs);
+      const deadline = byId<HTMLTimeElement>('deadline');
+      if (deadline) {
+        deadline.dateTime = new Date(deadlineMs).toISOString();
+        deadline.textContent = formatInEastern(summary.deadlineIso, 'deadline');
+      }
     }
-  } catch (err) {
-    console.error('Failed to load ./data/summary.json:', err);
   }
 
-  renderDashboard();
+  renderCounts(summary);
+  setText('synced', formatInEastern(summary.lastSyncedAt, 'synced'));
 
-  // Wire stance filter buttons
-  document.querySelectorAll<HTMLButtonElement>('[data-stance-filter]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('[data-stance-filter]').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeStanceFilter = (btn.dataset.stanceFilter as 'ALL' | Stance) || 'ALL';
-      renderCommentsTable();
-    });
-  });
+  historyPoints = await loadHistory(summary);
+  selectedIndex = Math.max(0, historyPoints.length - 1);
 
-  // Wire source filter select
-  const sourceSelect = document.getElementById('source-filter-select') as HTMLSelectElement | null;
-  sourceSelect?.addEventListener('change', () => {
-    activeSourceFilter = sourceSelect.value;
-    renderCommentsTable();
-  });
+  renderLineChart();
+  renderHistoryStatus();
+  updateShareBlock();
+  wireTimeline();
+  wireChartToggle();
+  observeChartResize();
 
-  // Wire search input
-  const searchInput = document.getElementById('comment-search-input') as HTMLInputElement | null;
-  searchInput?.addEventListener('input', () => {
-    searchQuery = searchInput.value;
-    renderCommentsTable();
-  });
-
-  // Wire sync buttons
-  document.getElementById('btn-sync-latest')?.addEventListener('click', () => {
-    void runBrowserLiveSync(false);
-  });
-  document.getElementById('btn-sync-all')?.addEventListener('click', () => {
-    void runBrowserLiveSync(true);
-  });
-  document.getElementById('btn-export-json')?.addEventListener('click', () => {
-    downloadSnapshotJson();
-  });
-  document.getElementById('btn-reset-cache')?.addEventListener('click', () => {
-    localStorage.removeItem(STORAGE_KEY_SNAPSHOT);
-    window.location.reload();
-  });
-
-  const csvInput = document.getElementById('input-csv-upload') as HTMLInputElement | null;
-  csvInput?.addEventListener('change', () => {
-    const file = csvInput.files?.[0];
-    if (file) void handleCsvUpload(file);
+  // setInterval is throttled in background tabs, so re-sync the digits on return.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && timerHandle !== undefined) {
+      tick(new Date(summary.deadlineIso || FALLBACK_DEADLINE_ISO).getTime());
+    }
   });
 }
 

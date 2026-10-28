@@ -47,7 +47,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/data/summary.json docs/app.js
+          git add docs/data/summary.json docs/data/history.json docs/app.js
           git diff --staged --quiet || git commit -m "chore(data): update USCIS-2026-0364-0001 comment classifications"
           git push || true
 

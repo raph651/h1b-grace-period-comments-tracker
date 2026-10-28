@@ -1,196 +1,133 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>USCIS-2026-0364-0001 Comment Tracker | Eliminating the Discretionary 60-Day Grace Period</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Comment Period Timer · USCIS-2026-0364-0001</title>
+  <meta name="description" content="A running count of the public comments filed on DHS's proposed rule to eliminate the discretionary 60-day grace period, and how they split by stance. Updated every six hours." />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="site-header">
-    <div class="container header-inner">
-      <div>
-        <div class="eyebrow">
-          <span id="status-badge" class="badge badge-open">Open for Comment</span>
-          <span class="docket-tag">Docket: USCIS-2026-0364</span>
-          <span class="docket-tag">RIN 1615-AD22</span>
-        </div>
-        <h1>Eliminating the Discretionary 60-Day Grace Period</h1>
-        <p class="subtitle">
-          Live public comment tracker &amp; Gemini stance classifier for
-          <a href="https://www.regulations.gov/document/USCIS-2026-0364-0001" target="_blank" rel="noopener noreferrer">USCIS-2026-0364-0001 ↗</a>
-          (<a href="https://www.regulations.gov/document/USCIS-2026-0364-0001/comment" target="_blank" rel="noopener noreferrer">View All Comments on Regulations.gov ↗</a>)
-        </p>
-      </div>
-      <div class="deadline-box">
-        <div class="deadline-label">Comment Period Ends Nov 10, 2026 (11:59 PM EST)</div>
-        <div id="countdown-timer" class="countdown-value">Loading countdown...</div>
-        <div id="last-synced" class="meta-sub">Last synced: —</div>
-      </div>
-    </div>
-  </header>
+  <main class="page">
 
-  <main class="container">
-    <!-- KPI Summary Cards -->
-    <section class="kpi-grid" aria-label="Comment Stance Summary">
-      <div class="kpi-card">
-        <div class="kpi-label">Total Published Comments</div>
-        <div id="kpi-total" class="kpi-value">26,786</div>
-        <div id="kpi-indexed" class="kpi-sub">26,786 indexed &amp; classified</div>
+    <p class="kicker">USCIS-2026-0364-0001 · RIN 1615-AD22</p>
+
+    <section class="timer" aria-labelledby="timer-heading">
+      <h1 id="timer-heading" class="micro">Comment period timer</h1>
+      <p id="countdown" class="timer-value" role="timer" aria-live="off">
+        <span class="seg"><span class="num" data-unit="d">—</span><span class="unit">d</span></span>
+        <span class="seg"><span class="num" data-unit="h">—</span><span class="unit">h</span></span>
+        <span class="seg"><span class="num" data-unit="m">—</span><span class="unit">m</span></span>
+        <span class="seg"><span class="num" data-unit="s">—</span><span class="unit">s</span></span>
+      </p>
+      <p class="timer-deadline">Closes <time id="deadline" datetime="2026-11-11T04:59:59Z">November 10, 2026, 11:59 PM EST</time></p>
+    </section>
+
+    <hr class="rule" />
+
+    <section aria-labelledby="what-heading">
+      <h2 id="what-heading" class="micro">What this is</h2>
+      <p class="lede">
+        A running count of the public comments filed on the Department of Homeland Security's
+        proposed rule to <strong>eliminate the discretionary 60-day grace period</strong>, and how
+        those comments split between supporting and opposing it.
+      </p>
+      <p class="lede-sub">
+        That is the whole page: a timer, a count, a split, and a short history. Figures refresh
+        every six hours from Regulations.gov.
+      </p>
+    </section>
+
+    <section class="counts" aria-labelledby="count-heading">
+      <h2 id="count-heading" class="micro">The count</h2>
+      <p class="total">
+        <span id="n-total" class="total-value">—</span>
+        <span class="total-unit">comments filed</span>
+      </p>
+
+      <div id="bar" class="bar" role="img" aria-label="Stance split of filed comments">
+        <span id="bar-support" class="seg seg-support" style="width:0%"></span>
+        <span id="bar-oppose" class="seg seg-oppose" style="width:0%"></span>
+        <span id="bar-cant" class="seg seg-cant" style="width:0%"></span>
       </div>
-      <div class="kpi-card kpi-support">
-        <div class="kpi-label">Support Proposed Rule</div>
-        <div class="kpi-row">
-          <span id="kpi-support" class="kpi-value">21,840</span>
-          <span id="kpi-support-pct" class="kpi-pct">81.5%</span>
+
+      <dl class="legend">
+        <div class="legend-item">
+          <dt><i class="dot dot-support"></i>Support</dt>
+          <dd id="n-support">—</dd>
         </div>
-        <div class="kpi-sub">Favors eliminating/shortening the 60-day grace period</div>
+        <div class="legend-item">
+          <dt><i class="dot dot-oppose"></i>Oppose</dt>
+          <dd id="n-oppose">—</dd>
+        </div>
+        <div class="legend-item">
+          <dt><i class="dot dot-cant"></i>Can't tell</dt>
+          <dd id="n-cant">—</dd>
+        </div>
+      </dl>
+    </section>
+
+    <hr class="rule" />
+
+    <section class="history" aria-labelledby="history-heading">
+      <div class="history-head">
+        <h2 id="history-heading" class="micro">History</h2>
+        <div class="toggle" id="chart-toggle" role="group" aria-label="Chart units">
+          <button type="button" class="toggle-btn is-active" data-mode="pct" aria-pressed="true">Percent</button>
+          <button type="button" class="toggle-btn" data-mode="count" aria-pressed="false">Count</button>
+        </div>
       </div>
-      <div class="kpi-card kpi-oppose">
-        <div class="kpi-label">Oppose Proposed Rule</div>
-        <div class="kpi-row">
-          <span id="kpi-oppose" class="kpi-value">4,792</span>
-          <span id="kpi-oppose-pct" class="kpi-pct">17.9%</span>
+
+      <figure class="chart-figure">
+        <div id="line-chart" class="chart" role="img" aria-label="Support and oppose share of comments over time"></div>
+        <figcaption class="chart-cap" id="chart-cap">
+          <span class="cap-item"><i class="dot dot-support"></i>Support</span>
+          <span class="cap-item"><i class="dot dot-oppose"></i>Oppose</span>
+          <span class="cap-item"><i class="dot dot-cant"></i>Can't tell</span>
+          <span id="history-status" class="cap-note"></span>
+        </figcaption>
+      </figure>
+
+      <div class="share-block">
+        <div class="donut-wrap">
+          <div id="donut" class="donut" role="img" aria-label="Share of comments at the selected snapshot"></div>
         </div>
-        <div class="kpi-sub">Urges retaining the 60-day grace period</div>
+        <div class="donut-side">
+          <p id="donut-date" class="donut-date">—</p>
+          <dl id="donut-legend" class="dl-rows"></dl>
+        </div>
       </div>
-      <div class="kpi-card kpi-cant-tell">
-        <div class="kpi-label">Can’t Tell (Rare)</div>
-        <div class="kpi-row">
-          <span id="kpi-cant-tell" class="kpi-value">154</span>
-          <span id="kpi-cant-tell-pct" class="kpi-pct">0.6%</span>
-        </div>
-        <div class="kpi-sub">Attachment-only or no explicit stance</div>
+
+      <div class="slider-row">
+        <label class="micro slider-label" for="timeline">Timeline</label>
+        <input id="timeline" class="slider" type="range" min="0" max="0" value="0" step="1" aria-label="Select a snapshot in time" />
+        <span id="timeline-range" class="slider-range">—</span>
       </div>
     </section>
 
-    <!-- Visual Stance Distribution Bar -->
-    <section class="card">
-      <div class="section-header">
-        <h2>Stance Distribution</h2>
-        <span class="meta-sub">Classified into Support, Oppose, and Can’t tell</span>
-      </div>
-      <div class="stacked-bar" role="img" aria-label="Stance distribution bar">
-        <div id="bar-support" class="bar-segment bar-support" style="width: 81.5%" title="Support"></div>
-        <div id="bar-oppose" class="bar-segment bar-oppose" style="width: 17.9%" title="Oppose"></div>
-        <div id="bar-cant-tell" class="bar-segment bar-cant-tell" style="width: 0.6%" title="Can't tell"></div>
-      </div>
-      <div class="legend-row">
-        <span><i class="dot dot-support"></i> <strong>Support</strong> (Eliminate 60-day grace period)</span>
-        <span><i class="dot dot-oppose"></i> <strong>Oppose</strong> (Keep 60-day grace period)</span>
-        <span><i class="dot dot-cant-tell"></i> <strong>Can’t tell</strong> (Ambiguous / Attachment-only)</span>
-      </div>
+    <hr class="rule" />
+
+    <section class="note" aria-labelledby="note-heading">
+      <h2 id="note-heading" class="micro">Before you read the numbers</h2>
+      <p>
+        This page is informational only. It is not a solicitation, it makes no recommendations,
+        it carries no legal advertising, and it provides no software service.
+      </p>
+      <p>
+        Comments are public records of the people who wrote them, not of this page. Nothing here
+        stands in for the comments themselves — read them in full at
+        <a href="https://www.regulations.gov/document/USCIS-2026-0364-0001/comment" target="_blank" rel="noopener noreferrer">Regulations.gov</a>.
+      </p>
     </section>
 
-    <!-- Mass-Mail Campaigns vs Individual Breakdown -->
-    <section class="card">
-      <div class="section-header">
-        <h2>Mass-Mail Campaigns vs. Individual Submissions</h2>
-        <span class="meta-sub">Deduplicating mass campaigns (MM78, MM83, MM73) captures all 26,786+ comments without exhausting API rate limits</span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Campaign / Group</th>
-              <th>Stance</th>
-              <th>Submissions (% of Total)</th>
-              <th>Representative Text / Summary</th>
-              <th>Sample Comment</th>
-            </tr>
-          </thead>
-          <tbody id="campaign-table-body"></tbody>
-        </table>
-      </div>
-    </section>
+    <footer class="foot">
+      <p>Last synced <span id="synced">—</span></p>
+      <p>
+        <a href="https://www.regulations.gov/document/USCIS-2026-0364-0001" target="_blank" rel="noopener noreferrer">Docket USCIS-2026-0364</a>
+      </p>
+    </footer>
 
-    <!-- Live Browser API Sync & Bulk CSV Upload -->
-    <section class="card sync-card">
-      <details>
-        <summary class="sync-summary">
-          <span><strong>Live API Sync &amp; Bulk CSV Classifier</strong> (Regulations.gov v4 API + Gemini 2.5 Flash)</span>
-          <span class="btn-outline-sm">Configure &amp; Sync ▾</span>
-        </summary>
-        <div class="sync-body">
-          <p class="sync-note">
-            Automated syncing runs on schedule via GitHub Actions. You can also run a live sync or classify a
-            <a href="https://www.regulations.gov/bulkdownload" target="_blank" rel="noopener noreferrer">Regulations.gov Bulk CSV download ↗</a>
-            directly in your browser. Keys are stored only in your local browser storage.
-          </p>
-          <div class="form-grid">
-            <label>
-              <span>Regulations.gov API Key (<a href="https://open.gsa.gov/api/regulationsgov/" target="_blank" rel="noopener noreferrer">Get data.gov Key ↗</a>)</span>
-              <input id="input-reg-key" type="password" placeholder="Enter your data.gov API key..." autocomplete="off" />
-            </label>
-            <label>
-              <span>Gemini API Key (<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Get AI Studio Key ↗</a>)</span>
-              <input id="input-gemini-key" type="password" placeholder="AIzaSy... (optional; falls back to rule heuristics)" autocomplete="off" />
-            </label>
-          </div>
-          <div class="button-row">
-            <button id="btn-sync-latest" type="button" class="btn btn-primary">Sync Latest 500 Comments + Classify</button>
-            <button id="btn-sync-all" type="button" class="btn btn-secondary" title="Uses sliding lastModifiedDate windows to page past the 5,000-comment API cap">Full Sliding-Window Sync (All Comments)</button>
-            <label class="btn btn-secondary file-label">
-              Import Regulations.gov CSV
-              <input id="input-csv-upload" type="file" accept=".csv" hidden />
-            </label>
-            <button id="btn-export-json" type="button" class="btn btn-ghost">Download summary.json</button>
-            <button id="btn-reset-cache" type="button" class="btn btn-ghost">Reset Local Cache</button>
-          </div>
-          <div id="sync-status-log" class="sync-log">Ready. Enter your API keys above or upload a CSV to run an on-demand sync.</div>
-        </div>
-      </details>
-    </section>
-
-    <!-- Filterable & Searchable Comments Explorer -->
-    <section class="card">
-      <div class="explorer-header">
-        <div>
-          <h2>Indexed Comments Explorer</h2>
-          <div id="filtered-count-label" class="meta-sub">Showing comments</div>
-        </div>
-        <div class="controls-row">
-          <div class="pill-group" role="group" aria-label="Filter by stance">
-            <button type="button" class="filter-pill active" data-stance-filter="ALL">All</button>
-            <button type="button" class="filter-pill" data-stance-filter="Support">Support</button>
-            <button type="button" class="filter-pill" data-stance-filter="Oppose">Oppose</button>
-            <button type="button" class="filter-pill" data-stance-filter="Can't tell">Can’t tell</button>
-          </div>
-          <select id="source-filter-select" aria-label="Filter by campaign or individual source">
-            <option value="ALL">All Sources</option>
-            <option value="INDIVIDUAL">Individual Comments Only</option>
-            <option value="MM78">MM78 Campaign</option>
-            <option value="MM83">MM83 Campaign</option>
-            <option value="MM73">MM73 Campaign</option>
-          </select>
-          <input id="comment-search-input" type="search" placeholder="Search ID, author, or text..." />
-        </div>
-      </div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Comment ID &amp; Date</th>
-              <th>Source</th>
-              <th>Stance</th>
-              <th>Comment Excerpt</th>
-              <th>Classification Reason</th>
-            </tr>
-          </thead>
-          <tbody id="comments-table-body"></tbody>
-        </table>
-      </div>
-    </section>
   </main>
-
-  <footer class="site-footer container">
-    <p>
-      Data source: <a href="https://www.regulations.gov/document/USCIS-2026-0364-0001/comment" target="_blank" rel="noopener noreferrer">Regulations.gov Docket USCIS-2026-0364-0001</a>.
-      Built with TypeScript for GitHub Pages.
-    </p>
-  </footer>
-
   <script type="module" src="./app.js"></script>
 </body>
 </html>

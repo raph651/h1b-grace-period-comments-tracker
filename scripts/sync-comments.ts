@@ -48,9 +48,19 @@ export interface TrackerSummary {
   comments: CommentRecord[];
 }
 
+export interface HistoryPoint {
+  t: string;
+  support: number;
+  oppose: number;
+  cantTell: number;
+  total: number;
+}
+
 const DOCUMENT_ID = 'USCIS-2026-0364-0001';
 const DOCKET_ID = 'USCIS-2026-0364';
 const SUMMARY_PATH = path.join(process.cwd(), 'docs', 'data', 'summary.json');
+const HISTORY_PATH = path.join(process.cwd(), 'docs', 'data', 'history.json');
+const MAX_HISTORY_POINTS = 2000;
 
 const REGULATIONS_API_KEY = process.env.REGULATIONS_API_KEY || '';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
@@ -233,6 +243,91 @@ function formatRegulationsDate(isoDate: string): string {
   const d = new Date(isoDate);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+function readHistory(): HistoryPoint[] {
+  if (!fs.existsSync(HISTORY_PATH)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8')) as { points?: HistoryPoint[] };
+    return Array.isArray(parsed.points) ? parsed.points : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(points: HistoryPoint[]): void {
+  fs.mkdirSync(path.dirname(HISTORY_PATH), { recursive: true });
+  fs.writeFileSync(HISTORY_PATH, `${JSON.stringify({ points }, null, 2)}\n`, 'utf8');
+  console.log(`Saved ${points.length} history point(s) to ${HISTORY_PATH}`);
+}
+
+/**
+ * Reconstruct a cumulative daily series from every comment's postedDate.
+ * Valid only when the run retrieved the full population, which is why it is
+ * gated on a minimum sample and only used before real snapshots accumulate.
+ */
+function buildHistoryFromComments(comments: CommentRecord[]): HistoryPoint[] {
+  const dated = comments.filter((comment) => comment.postedDate);
+  if (dated.length < 100) return [];
+
+  const byDay = new Map<string, { support: number; oppose: number; cantTell: number; total: number }>();
+  for (const comment of dated) {
+    const day = comment.postedDate.slice(0, 10);
+    const bucket = byDay.get(day) ?? { support: 0, oppose: 0, cantTell: 0, total: 0 };
+    if (comment.stance === 'Support') bucket.support++;
+    else if (comment.stance === 'Oppose') bucket.oppose++;
+    else bucket.cantTell++;
+    bucket.total++;
+    byDay.set(day, bucket);
+  }
+
+  let running = { support: 0, oppose: 0, cantTell: 0, total: 0 };
+  return Array.from(byDay.keys())
+    .sort()
+    .map((day) => {
+      const bucket = byDay.get(day)!;
+      running = {
+        support: running.support + bucket.support,
+        oppose: running.oppose + bucket.oppose,
+        cantTell: running.cantTell + bucket.cantTell,
+        total: running.total + bucket.total
+      };
+      return { t: `${day}T23:59:59Z`, ...running };
+    });
+}
+
+function updateHistory(summary: TrackerSummary, comments: CommentRecord[]): void {
+  let points = readHistory();
+
+  // A full sync can backfill the whole curve from per-comment dates.
+  if (points.length < 2) {
+    const reconstructed = buildHistoryFromComments(comments);
+    if (reconstructed.length >= 2) {
+      console.log(`Backfilled ${reconstructed.length} history points from comment dates.`);
+      points = reconstructed;
+    }
+  }
+
+  const latest: HistoryPoint = {
+    t: summary.lastSyncedAt,
+    support: summary.counts.Support,
+    oppose: summary.counts.Oppose,
+    cantTell: summary.counts["Can't tell"],
+    total: summary.totalPublishedOnDocket
+  };
+
+  const last = points[points.length - 1];
+  const changed =
+    !last ||
+    last.total !== latest.total ||
+    last.support !== latest.support ||
+    last.oppose !== latest.oppose ||
+    last.cantTell !== latest.cantTell;
+
+  if (changed) points = [...points, latest];
+  if (points.length > MAX_HISTORY_POINTS) points = points.slice(-MAX_HISTORY_POINTS);
+
+  writeHistory(points);
 }
 
 async function main() {
@@ -481,6 +576,8 @@ async function main() {
   fs.mkdirSync(path.dirname(SUMMARY_PATH), { recursive: true });
   fs.writeFileSync(SUMMARY_PATH, JSON.stringify(updatedSummary, null, 2), 'utf8');
   console.log(`Saved updated tracker data to ${SUMMARY_PATH}`);
+
+  updateHistory(updatedSummary, allComments);
 }
 
 main().catch((err) => {
