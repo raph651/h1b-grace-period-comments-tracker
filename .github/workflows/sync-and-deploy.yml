@@ -51,14 +51,34 @@ jobs:
           git diff --staged --quiet || git commit -m "chore(data): update USCIS-2026-0364-0001 comment classifications"
           git push || true
 
+      # GitHub Pages cannot be served from a private repo on a free plan.
+      # Skip deployment while the repo is private; it resumes automatically
+      # on the next run once the repo is switched to public.
+      - name: Check whether Pages deployment is possible
+        id: pages-check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VISIBILITY=$(gh api "repos/${{ github.repository }}" --jq '.private')
+          if [ "$VISIBILITY" = "false" ]; then
+            echo "Repo is public - Pages deployment enabled."
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Repo is private - skipping Pages deployment (free plan limitation)."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure GitHub Pages
+        if: steps.pages-check.outputs.deploy == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload GitHub Pages artifact (docs/)
+        if: steps.pages-check.outputs.deploy == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: "./docs"
 
       - name: Deploy to GitHub Pages
         id: deployment
+        if: steps.pages-check.outputs.deploy == 'true'
         uses: actions/deploy-pages@v4
