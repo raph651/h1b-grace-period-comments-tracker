@@ -1,0 +1,201 @@
+{
+  "documentId": "USCIS-2026-0364-0001",
+  "docketId": "USCIS-2026-0364",
+  "title": "Eliminating the Discretionary 60-Day Grace Period",
+  "documentUrl": "https://www.regulations.gov/document/USCIS-2026-0364-0001",
+  "commentsPageUrl": "https://www.regulations.gov/document/USCIS-2026-0364-0001/comment",
+  "deadlineIso": "2026-11-11T04:59:59Z",
+  "deadlineDisplay": "Nov 10, 2026 at 11:59 PM EST",
+  "lastSyncedAt": "2026-10-28T22:39:00Z",
+  "lastModifiedCursor": "2026-10-28 22:00:00",
+  "totalPublishedOnDocket": 26786,
+  "totalIndexedInTracker": 26786,
+  "counts": {
+    "Support": 21840,
+    "Oppose": 4792,
+    "Can't tell": 154
+  },
+  "campaigns": [
+    {
+      "campaignId": "MM78",
+      "label": "MM78 Mass Mail Campaign",
+      "count": 14120,
+      "stance": "Support",
+      "sampleId": "USCIS-2026-0364-15415",
+      "sampleUrl": "https://www.regulations.gov/comment/USCIS-2026-0364-15415",
+      "sampleExcerpt": "I support eliminating the discretionary 60-day grace period."
+    },
+    {
+      "campaignId": "MM83",
+      "label": "MM83 Mass Mail Campaign",
+      "count": 4890,
+      "stance": "Support",
+      "sampleId": "USCIS-2026-0364-17727",
+      "sampleUrl": "https://www.regulations.gov/comment/USCIS-2026-0364-17727",
+      "sampleExcerpt": "I am in favor of ending the 60 day grace period."
+    },
+    {
+      "campaignId": "MM73",
+      "label": "MM73 Mass Mail Campaign",
+      "count": 1950,
+      "stance": "Support",
+      "sampleId": "USCIS-2026-0364-17806",
+      "sampleUrl": "https://www.regulations.gov/comment/USCIS-2026-0364-17806",
+      "sampleExcerpt": "Removing the 60-day buffer and limiting any remaining time to 10 days for departure restores the classifications to their temporary, purpose-tied design, improves program integrity, and prevents gradual erosion of the temporary character of these visas. I urge DHS to finalize elimination of the 60-day grace period and replace it with a strict 10-day departure period."
+    },
+    {
+      "campaignId": "INDIVIDUAL",
+      "label": "Unique / Individual Submissions",
+      "count": 5826,
+      "stance": "Oppose",
+      "sampleId": "USCIS-2026-0364-0377",
+      "sampleUrl": "https://www.regulations.gov/comment/USCIS-2026-0364-0377",
+      "sampleExcerpt": "Individual comments include 4,792 opposing the rule (urging retention of the 60-day grace period), 880 supporting elimination, and 154 ambiguous/attachment-only submissions."
+    }
+  ],
+  "comments": [
+    {
+      "id": "USCIS-2026-0364-17806",
+      "title": "MM73 Comment Submitted by Anonymous",
+      "submitterName": "Anonymous",
+      "postedDate": "2026-09-18T00:00:00Z",
+      "lastModifiedDate": "2026-09-18T14:22:10Z",
+      "campaignId": "MM73",
+      "commentText": "I have personally seen H-1B colleagues secure new positions within a few weeks of layoff, while many American candidates remain unemployed for 6 to 12 months. Removing the 60-day buffer and limiting any remaining time to 10 days for departure restores the classifications to their temporary, purpose-tied design, improves program integrity, and prevents gradual erosion of the temporary character of these visas. I urge DHS to finalize elimination of the 60-day grace period and replace it with a strict 10-day departure period.",
+      "stance": "Support",
+      "reason": "Urges DHS to finalize elimination of the 60-day grace period and replace it with a 10-day departure window.",
+      "classifiedBy": "gemini",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-17806"
+    },
+    {
+      "id": "USCIS-2026-0364-17727",
+      "title": "MM83 Comment Submitted by A. Kovacevich",
+      "submitterName": "A. Kovacevich",
+      "postedDate": "2026-09-18T00:00:00Z",
+      "lastModifiedDate": "2026-09-18T13:45:00Z",
+      "campaignId": "MM83",
+      "commentText": "I am in favor of ending the 60 day grace period.",
+      "stance": "Support",
+      "reason": "Directly states support for ending the 60-day grace period.",
+      "classifiedBy": "gemini",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-17727"
+    },
+    {
+      "id": "USCIS-2026-0364-17716",
+      "title": "Comment Submitted by K Neil",
+      "submitterName": "K Neil",
+      "postedDate": "2026-09-18T00:00:00Z",
+      "lastModifiedDate": "2026-09-18T12:30:00Z",
+      "campaignId": null,
+      "commentText": "We are not an economic zone to be looted by the rest of the world.",
+      "stance": "Support",
+      "reason": "Expresses anti-nonimmigrant visa sentiment aligned with restricting/eliminating the grace period.",
+      "classifiedBy": "gemini",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-17716"
+    },
+    {
+      "id": "USCIS-2026-0364-17710",
+      "title": "Comment Submitted by Anonymous",
+      "submitterName": "Anonymous",
+      "postedDate": "2026-09-18T00:00:00Z",
+      "lastModifiedDate": "2026-09-18T12:15:00Z",
+      "campaignId": null,
+      "commentText": "End H1-B and all employment immigration NOW!!! American jobs for Americans!!!",
+      "stance": "Support",
+      "reason": "Calls for ending H-1B and employment-based immigration benefits, supporting removal of the grace period.",
+      "classifiedBy": "gemini",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-17710"
+    },
+    {
+      "id": "USCIS-2026-0364-16785",
+      "title": "MM78 Comment Submitted by Anonymous",
+      "submitterName": "Anonymous",
+      "postedDate": "2026-09-18T00:00:00Z",
+      "lastModifiedDate": "2026-09-18T11:05:00Z",
+      "campaignId": "MM78",
+      "commentText": "I am in full support of eliminating the discretionary 60-Day grace period.",
+      "stance": "Support",
+      "reason": "Explicitly supports eliminating the discretionary 60-day grace period.",
+      "classifiedBy": "gemini",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-16785"
+    },
+    {
+      "id": "USCIS-2026-0364-15415",
+      "title": "MM78 Comment Submitted by Anonymous",
+      "submitterName": "Anonymous",
+      "postedDate": "2026-09-17T00:00:00Z",
+      "lastModifiedDate": "2026-09-17T18:10:00Z",
+      "campaignId": "MM78",
+      "commentText": "I support eliminating the discretionary 60-day grace period.",
+      "stance": "Support",
+      "reason": "Explicitly supports eliminating the discretionary 60-day grace period.",
+      "classifiedBy": "campaign-template",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-15415"
+    },
+    {
+      "id": "USCIS-2026-0364-14923",
+      "title": "MM78 Comment Submitted by Erik Lindborg",
+      "submitterName": "Erik Lindborg",
+      "postedDate": "2026-09-17T00:00:00Z",
+      "lastModifiedDate": "2026-09-17T16:40:00Z",
+      "campaignId": "MM78",
+      "commentText": "I support eliminating the discretionary 60-day grace period.",
+      "stance": "Support",
+      "reason": "Part of the MM78 campaign supporting elimination of the 60-day grace period.",
+      "classifiedBy": "campaign-template",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-14923"
+    },
+    {
+      "id": "USCIS-2026-0364-14318",
+      "title": "MM78 Comment Submitted by Anonymous",
+      "submitterName": "Anonymous",
+      "postedDate": "2026-09-17T00:00:00Z",
+      "lastModifiedDate": "2026-09-17T14:12:00Z",
+      "campaignId": "MM78",
+      "commentText": "I support eliminating the discretionary 60-day grace period.",
+      "stance": "Support",
+      "reason": "Part of the MM78 campaign supporting elimination of the 60-day grace period.",
+      "classifiedBy": "campaign-template",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-14318"
+    },
+    {
+      "id": "USCIS-2026-0364-0379",
+      "title": "Comment Submitted by Anonymous",
+      "submitterName": "Anonymous",
+      "postedDate": "2026-09-11T00:00:00Z",
+      "lastModifiedDate": "2026-09-11T21:15:00Z",
+      "campaignId": null,
+      "commentText": "Subject: Comment Opposing the Removal of the 60-Day H-1B Grace Period. I strongly oppose the proposed rule to eliminate the 60-day discretionary grace period.",
+      "stance": "Oppose",
+      "reason": "Explicitly opposes removing the 60-day grace period for nonimmigrant workers.",
+      "classifiedBy": "gemini",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-0379"
+    },
+    {
+      "id": "USCIS-2026-0364-0377",
+      "title": "Comment Submitted by Anonymous",
+      "submitterName": "Anonymous",
+      "postedDate": "2026-09-11T00:00:00Z",
+      "lastModifiedDate": "2026-09-11T20:50:00Z",
+      "campaignId": null,
+      "commentText": "I respectfully oppose DHS's proposal to eliminate the up-to-60-day grace period under 8 CFR 214.1(l)(2).",
+      "stance": "Oppose",
+      "reason": "Respectfully opposes DHS's proposal to eliminate the 60-day grace period under 8 CFR 214.1(l)(2).",
+      "classifiedBy": "gemini",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-0377"
+    },
+    {
+      "id": "USCIS-2026-0364-0292",
+      "title": "Comment Submitted by Anonymous",
+      "submitterName": "Anonymous",
+      "postedDate": "2026-09-11T00:00:00Z",
+      "lastModifiedDate": "2026-09-11T19:05:00Z",
+      "campaignId": null,
+      "commentText": "Re: DHS Docket No. USCIS-2026-0364, RIN 1615-AD22. If DHS believes changes are necessary, there are less harmful alternatives: retain the 60-day grace period rather than requiring immediate departure.",
+      "stance": "Oppose",
+      "reason": "Argues against eliminating the grace period and recommends retaining the 60-day transition window.",
+      "classifiedBy": "gemini",
+      "url": "https://www.regulations.gov/comment/USCIS-2026-0364-0292"
+    }
+  ]
+}

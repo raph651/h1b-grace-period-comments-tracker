@@ -1,0 +1,64 @@
+name: Sync Comments & Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  schedule:
+    # Runs every 6 hours until the comment period ends on Nov 10, 2026 EST
+    - cron: "15 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  sync-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22+
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Sync Regulations.gov comments & classify with Gemini
+        env:
+          REGULATIONS_API_KEY: ${{ secrets.REGULATIONS_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          node --experimental-strip-types scripts/sync-comments.ts
+
+      - name: Build TypeScript frontend for GitHub Pages
+        run: |
+          node --experimental-strip-types scripts/build.ts
+
+      - name: Commit updated comment snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/summary.json docs/app.js
+          git diff --staged --quiet || git commit -m "chore(data): update USCIS-2026-0364-0001 comment classifications"
+          git push || true
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact (docs/)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./docs"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
