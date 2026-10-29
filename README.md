@@ -1,92 +1,9 @@
-# USCIS-2026-0364-0001 Comment Period Timer (GitHub Pages + TypeScript)
+# DHS Public Comments Tracker
 
-A deliberately small page about the public comments filed on **[Eliminating the Discretionary 60-Day Grace Period (USCIS-2026-0364-0001)](https://www.regulations.gov/document/USCIS-2026-0364-0001/comment)** through the **November 10, 2026 (11:59 PM EST)** deadline.
+Counting public comments on DHS's proposed rule to eliminate the discretionary 60-day grace period — how many support it, how many oppose it, refreshed every 6 hours.
 
-The page shows four things and nothing else:
+**→ https://raph651.github.io/h1b-grace-period-comments-tracker/**
 
-1. **A countdown** to the close of the comment period.
-2. **The count** — total comments filed, split into **Support**, **Oppose**, and **Can't tell**.
-3. **A line chart** of that split over time, switchable between percentage and raw counts.
-4. **A donut** of the shares at any recorded snapshot, driven by a timeline dragger.
+[![Screenshot of the tracker](screenshot.png)](https://raph651.github.io/h1b-grace-period-comments-tracker/)
 
-It is informational only: no solicitation, no recommendations, no legal advertising, no software service.
-
-## Where the numbers come from
-
-`scripts/sync-comments.ts` classifies each comment into **Support**, **Oppose**, or **Can't tell** from Regulations.gov data and writes two files:
-
-- `docs/data/summary.json` — the current snapshot the page renders.
-- `docs/data/history.json` — the time series, plus a `source` field saying how it was produced.
-
-The GitHub Actions workflow runs every 6 hours (cron `15 */6 * * *`) until the deadline, then commits both files and deploys `docs/` to Pages.
-
-### How it gets all 26,786+ comments
-
-1. **Sliding `lastModifiedDate` window pagination**: the Regulations.gov v4 API caps a single query at 20 pages of 250 items (5,000 comments). The sync sorts by `lastModifiedDate,documentId` and advances `filter[lastModifiedDate][ge]` across windows so the whole docket is retrieved.
-2. **Mass-mail campaign deduplication (`MM78`, `MM83`, `MM73`)**: over 75% of submissions belong to these campaigns. The sync fetches and classifies one representative comment per campaign and applies that stance to all matching submissions, saving API quota under the 1,000 requests/hour `data.gov` limit.
-
-### A note on history
-
-Every comment carries a `postedDate`, so the curve does not have to be waited for. Any sync that retrieves the full docket rebuilds `history.json` from those dates — one point per calendar day, each holding the running total and the running stance split as of that day (`"source": "comments"`). That means the chart and the timeline dragger cover the entire comment period, from the first comment to the last, on the very first full sync.
-
-Snapshots taken between syncs are kept as extra points on top (`"source": "snapshots"` when no reconstruction is possible). Until a full sync runs, the file holds the single current snapshot and the page says so plainly rather than drawing a fake line.
-
-`postedDate` is day-granular, so comment-derived points are labelled as calendar dates in UTC; snapshot points keep their Eastern timestamps.
-
-## Quick Start (Local Development)
-
-```bash
-# 1. Compile TypeScript frontend (src/app.ts -> docs/app.js)
-npm run build
-
-# 2. (Optional) Run a full sync from the command line
-REGULATIONS_API_KEY="your_datagov_key" GEMINI_API_KEY="your_gemini_key" npm run sync
-
-# 3. Preview the site locally at http://localhost:8080
-npm run serve
-```
-
-Node.js 22.6+ is required (the build uses native `module.stripTypeScriptTypes`).
-
-## API keys
-
-The sync needs two keys. Keep them in a file **outside** the repository, so they cannot be committed:
-
-```bash
-mkdir -p ~/.config/uscis-tracker
-cat > ~/.config/uscis-tracker/keys.env <<'EOF'
-REGULATIONS_API_KEY=your_data_gov_key
-GEMINI_API_KEY=your_ai_studio_key
-EOF
-chmod 600 ~/.config/uscis-tracker/keys.env
-```
-
-Then push them to GitHub Actions secrets:
-
-```bash
-./scripts/set-secrets.sh --dry-run   # confirm both keys are found; writes nothing
-./scripts/set-secrets.sh             # creates REGULATIONS_API_KEY and GEMINI_API_KEY
-```
-
-Each value is piped to `gh secret set` on stdin, so it never appears in `argv`, shell history, or the script's output. GitHub stores secrets write-only — `gh secret list` shows the names, and nothing (including this tooling) can read the values back.
-
-For a local run, point Node at the same file:
-
-```bash
-node --env-file="$HOME/.config/uscis-tracker/keys.env" --experimental-strip-types scripts/sync-comments.ts
-```
-
-If you only need the scheduled Action and never run locally, `gh secret set REGULATIONS_API_KEY` on its own will prompt for the value interactively instead.
-
-Rotate or revoke keys at [data.gov](https://api.data.gov/signup/) and [Google AI Studio](https://aistudio.google.com/apikey); then re-run `set-secrets.sh`.
-
-## Hosting on GitHub Pages
-
-1. Push this folder to a repository's `main` branch.
-2. **Settings → Pages** → **Build and deployment** → Source: **GitHub Actions**.
-3. **Settings → Secrets and variables → Actions** → add:
-   - `REGULATIONS_API_KEY` — your `data.gov` key for Regulations.gov.
-   - `GEMINI_API_KEY` — your Gemini key from [Google AI Studio](https://aistudio.google.com/apikey).
-4. The workflow syncs, classifies with `gemini-2.5-flash`, commits the data, and publishes `docs/`.
-
-Pages cannot be served from a **private** repo on a free plan, so the workflow checks the repository visibility and skips the deploy steps while the repo is private. It resumes automatically on the next run after the repo is made public. With no secrets configured, the sync step is a no-op and the site keeps serving the last committed snapshot.
+Source: [Regulations.gov docket USCIS-2026-0364](https://www.regulations.gov/document/USCIS-2026-0364-0001/comment). Comments are public records; this page is informational only and makes no recommendations.
