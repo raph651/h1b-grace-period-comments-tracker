@@ -1198,3 +1198,13 @@ a:focus-visible {
   border-color: var(--muted);
   color: var(--ink);
 }
+
+.cross-link {
+  flex-basis: 100%;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.cross-link a {
+  text-decoration-color: var(--rule);
+}

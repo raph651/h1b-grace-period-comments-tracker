@@ -58,18 +58,55 @@ interface HistoryPoint {
 }
 
 const ROOT = process.cwd();
-const DATA_DIR = path.join(ROOT, 'data');
+
+interface DocketConfig {
+  slug: string;
+  documentId: string;
+  docketId: string;
+  title: string;
+  epoch: string;
+  deadlineIso: string;
+  deadlineDisplay: string;
+}
+
+const DOCKETS: Record<string, DocketConfig> = {
+  h1b: {
+    slug: 'h1b',
+    documentId: 'USCIS-2026-0364-0001',
+    docketId: 'USCIS-2026-0364',
+    title: 'Eliminating the Discretionary 60-Day Grace Period',
+    epoch: '2026-09-11 00:00:00',
+    deadlineIso: '2026-11-11T04:59:59Z',
+    deadlineDisplay: 'Nov 10, 2026 at 11:59 PM EST'
+  },
+  opt: {
+    slug: 'opt',
+    documentId: 'ICEB-2026-0100-0001',
+    docketId: 'ICEB-2026-0100',
+    title: 'Optional Practical Training Fees',
+    epoch: '2026-10-07 00:00:00',
+    deadlineIso: '2026-11-10T04:59:59Z',
+    deadlineDisplay: 'Nov 9, 2026 at 11:59 PM EST'
+  }
+};
+
+// Parsed inline: --docket opt (defaults to the H-1B docket).
+const docketArgIndex = process.argv.indexOf('--docket');
+const DOCKET =
+  DOCKETS[docketArgIndex >= 0 ? process.argv[docketArgIndex + 1] ?? 'h1b' : 'h1b'] ?? DOCKETS.h1b;
+
+const DATA_DIR = path.join(ROOT, 'data', DOCKET.slug);
 const LIST_PATH = path.join(DATA_DIR, 'list.jsonl');
 const DETAILS_PATH = path.join(DATA_DIR, 'details.jsonl');
 const CLASSES_PATH = path.join(DATA_DIR, 'classifications.jsonl');
 const STATE_PATH = path.join(DATA_DIR, 'fetch-state.json');
-const SUMMARY_PATH = path.join(ROOT, 'docs', 'data', 'summary.json');
-const HISTORY_PATH = path.join(ROOT, 'docs', 'data', 'history.json');
+const SUMMARY_PATH = path.join(ROOT, 'docs', 'data', DOCKET.slug, 'summary.json');
+const HISTORY_PATH = path.join(ROOT, 'docs', 'data', DOCKET.slug, 'history.json');
 
-const DOCUMENT_ID = 'USCIS-2026-0364-0001';
-const DOCKET_ID = 'USCIS-2026-0364';
-const DEADLINE_ISO = '2026-11-11T04:59:59Z';
-const EPOCH = '2026-09-11 00:00:00';
+const DOCUMENT_ID = DOCKET.documentId;
+const DOCKET_ID = DOCKET.docketId;
+const DEADLINE_ISO = DOCKET.deadlineIso;
+const EPOCH = DOCKET.epoch;
 
 const API_KEY = process.env.REGULATIONS_API_KEY || '';
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
@@ -739,12 +776,12 @@ function buildArtifacts(): void {
   const summary = {
     documentId: DOCUMENT_ID,
     docketId: DOCKET_ID,
-    title: 'Eliminating the Discretionary 60-Day Grace Period',
+    title: DOCKET.title,
     documentUrl: `https://www.regulations.gov/document/${DOCUMENT_ID}`,
     commentsPageUrl: `https://www.regulations.gov/document/${DOCUMENT_ID}/comment`,
     model: GEMINI_KEY ? GEMINI_MODEL : 'keyword heuristics',
     deadlineIso: DEADLINE_ISO,
-    deadlineDisplay: 'Nov 10, 2026 at 11:59 PM EST',
+    deadlineDisplay: DOCKET.deadlineDisplay,
     lastSyncedAt: new Date().toISOString(),
     totalPublishedOnDocket: merged.length,
     totalIndexedInTracker: merged.length,

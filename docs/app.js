@@ -31,6 +31,10 @@
 const FALLBACK_DEADLINE_ISO = '2026-11-11T04:59:59Z';
 const DEADLINE_TIME_ZONE = 'America/New_York';
 
+// Which docket this page shows; set on <body data-docket="…">.
+const DOCKET_SLUG = document.body.dataset.docket || 'h1b';
+const DATA_BASE = `./data/${DOCKET_SLUG}`;
+
 let historyPoints                 = [];
 let allPoints                 = [];
 const tagSeries = new Map                        ();
@@ -633,7 +637,7 @@ function observeChartResize()       {
 
 async function loadSummary()                          {
   try {
-    const response = await fetch('./data/summary.json', { cache: 'no-store' });
+    const response = await fetch(`${DATA_BASE}/summary.json`, { cache: 'no-store' });
     if (!response.ok) return {};
     return (await response.json())                  ;
   } catch (error) {
@@ -652,7 +656,7 @@ async function loadHistory(
   summary                
 )                                                                                           {
   try {
-    const response = await fetch('./data/history.json', { cache: 'no-store' });
+    const response = await fetch(`${DATA_BASE}/history.json`, { cache: 'no-store' });
     if (response.ok) {
       const data = (await response.json())     
                                           
