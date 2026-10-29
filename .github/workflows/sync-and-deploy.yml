@@ -64,12 +64,16 @@ jobs:
           node --experimental-strip-types scripts/build.ts
 
       - name: Commit updated comment snapshot
+        # A failed data commit must not block the deploy; the site should still
+        # publish the snapshot it just built.
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/data/summary.json docs/data/history.json docs/app.js
           git diff --staged --quiet || git commit -m "chore(data): update USCIS-2026-0364-0001 comment classifications"
-          git push || true
+          echo "--- pushing data commit ---"
+          git push || echo "push skipped (nothing new or rejected)"
 
       # GitHub Pages cannot be served from a private repo on a free plan.
       # Skip deployment while the repo is private; it resumes automatically
