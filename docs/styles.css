@@ -1144,29 +1144,29 @@ a:focus-visible {
 }
 
 .method-dialog {
-  width: calc(100% - 2rem);
-  max-width: 34rem;
-  padding: 1.75rem 1.9rem 1.4rem;
+  width: calc(100% - 2.5rem);
+  max-width: 32rem;
+  padding: 2rem 2rem 1.6rem;
   border: 1px solid var(--rule);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg);
   color: var(--ink);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.16);
+  box-shadow: none;
 }
 
 .method-dialog::backdrop {
-  background: rgba(20, 19, 17, 0.35);
+  background: rgba(23, 22, 20, 0.38);
 }
 
 .method-dialog .micro {
-  margin-bottom: 1rem;
+  margin: 0 0 1.25rem;
 }
 
 .method-dialog p {
-  margin: 0 0 0.85rem;
-  font-size: 0.82rem;
-  line-height: 1.6;
-  color: var(--muted);
+  margin: 0 0 0.95rem;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: var(--ink);
 }
 
 .method-dialog p:last-of-type {
@@ -1175,19 +1175,26 @@ a:focus-visible {
 
 .method-close {
   position: absolute;
-  top: 0.85rem;
-  right: 1rem;
-  padding: 0.2rem 0.4rem;
-  border: 0;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
   background: none;
   color: var(--faint);
   font: inherit;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 15px;
+  line-height: 1;
   cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .method-close:hover {
+  border-color: var(--muted);
   color: var(--ink);
 }
