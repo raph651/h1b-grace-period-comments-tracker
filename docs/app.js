@@ -62,16 +62,22 @@ function formatInEastern(iso                    , style                         
   }
 
   if (style === 'long') {
-    const parts = date.toLocaleString('en-US', {
+    // Build from parts rather than splitting one formatted string: Safari
+    // renders "Nov 10, 2026 at 11:59 PM EST", where splitting on ", " yields
+    // two elements and a literal "undefined" in the third.
+    const day = date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
+      timeZone: DEADLINE_TIME_ZONE
+    });
+    const time = date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       timeZone: DEADLINE_TIME_ZONE,
       timeZoneName: 'short'
-    }).split(', ');
-    return `${parts[0]}, ${parts[1]}, ${parts[2]}`;
+    });
+    return `${day}, ${time}`;
   }
 
   if (style === 'short') {
