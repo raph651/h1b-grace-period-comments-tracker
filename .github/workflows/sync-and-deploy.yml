@@ -32,12 +32,27 @@ jobs:
         with:
           node-version: "22"
 
-      # The committed docs/data is a complete build from the bulk export.
-      # scripts/sync-comments.ts is superseded by scripts/pipeline.ts and would
-      # overwrite that snapshot with a partial, paged re-sync. Leave this off
-      # until the 6-hourly delta worker lands.
-      - name: Sync (disabled — replaced by bulk ingest + pipeline)
-        if: ${{ false }}
+      # The comment store is far too large to commit, so it lives in the
+      # Actions cache. A committed compressed seed bootstraps the first run;
+      # every later run restores the cached store and only fetches the delta.
+      - name: Restore comment store
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: comment-store-${{ github.run_id }}
+          restore-keys: |
+            comment-store-
+
+      - name: Seed store on first run
+        run: |
+          if [ ! -f data/list.jsonl ]; then
+            echo "no cached store; extracting seed"
+            tar xzf data-seed.tar.gz
+          else
+            echo "restored $(wc -l < data/list.jsonl) comments from cache"
+          fi
+
+      - name: Fetch new comments & classify with Gemini
         env:
           REGULATIONS_API_KEY: ${{ secrets.REGULATIONS_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
