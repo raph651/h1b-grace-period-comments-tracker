@@ -1013,8 +1013,8 @@ a:focus-visible {
 
 .masthead-note {
   margin: 1.15rem 0 0;
-  max-width: 30rem;
-  font-size: var(--masthead-size);
+  max-width: none;
+  font-size: calc(var(--masthead-size) - 0.02rem);
   line-height: 1.55;
   color: var(--ink);
   text-wrap: pretty;
