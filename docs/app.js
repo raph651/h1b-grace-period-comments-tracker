@@ -12,6 +12,7 @@
                                                   
 
                           
+                 
                        
                         
                                   
@@ -31,6 +32,9 @@ const FALLBACK_DEADLINE_ISO = '2026-11-11T04:59:59Z';
 const DEADLINE_TIME_ZONE = 'America/New_York';
 
 let historyPoints                 = [];
+let allPoints                 = [];
+const tagSeries = new Map                        ();
+let activeTag = 'all';
 let historySource                           = 'snapshots';
 let selectedIndex = 0;
 let chartMode                  = 'pct';
@@ -48,13 +52,38 @@ function formatCount(value        )         {
   return value.toLocaleString('en-US');
 }
 
-function formatInEastern(iso                    , style                                         )         {
+function formatInEastern(iso                    , style                                                            )         {
   if (!iso) return '—';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '—';
 
   if (style === 'day') {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: DEADLINE_TIME_ZONE });
+  }
+
+  if (style === 'long') {
+    const parts = date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: DEADLINE_TIME_ZONE,
+      timeZoneName: 'short'
+    }).split(', ');
+    return `${parts[0]}, ${parts[1]}, ${parts[2]}`;
+  }
+
+  if (style === 'short') {
+    return date.toLocaleString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: DEADLINE_TIME_ZONE,
+      timeZoneName: 'short'
+    });
   }
 
   if (style === 'deadline') {
@@ -110,6 +139,76 @@ function setText(id        , text        )       {
 
 /* — countdown — */
 
+                    
+                   
+                      
+                    
+                
+ 
+
+const FLIP_UNITS                          = [
+  ['d', 'd'],
+  ['h', 'h'],
+  ['m', 'm'],
+  ['s', 's']
+];
+
+const flipUnits = new Map                  ();
+
+function buildFlipClock()       {
+  const root = byId             ('countdown');
+  if (!root || flipUnits.size > 0) return;
+  root.textContent = '';
+
+  for (const [key, label] of FLIP_UNITS) {
+    const wrap = document.createElement('div');
+    wrap.className = 'flip';
+    wrap.innerHTML =
+      '<div class="flip-card">' +
+      '<div class="half top"><span class="v">—</span></div>' +
+      '<div class="half bottom"><span class="v">—</span></div>' +
+      '<div class="flap"><span class="v"></span></div>' +
+      '</div>' +
+      `<span class="flip-label">${label}</span>`;
+    root.appendChild(wrap);
+
+    flipUnits.set(key, {
+      top: wrap.querySelector             ('.half.top .v') ,
+      bottom: wrap.querySelector             ('.half.bottom .v') ,
+      flap: wrap.querySelector             ('.flap') ,
+      value: ''
+    });
+  }
+}
+
+function setFlip(key        , next        )       {
+  const unit = flipUnits.get(key);
+  if (!unit || unit.value === next) return;
+
+  // First paint should not animate.
+  if (unit.value === '') {
+    unit.top.textContent = next;
+    unit.bottom.textContent = next;
+    unit.value = next;
+    return;
+  }
+
+  const flapText = unit.flap.querySelector             ('.v');
+  if (flapText) flapText.textContent = unit.value;
+  unit.top.textContent = next;
+
+  unit.flap.classList.remove('is-flipping');
+  void unit.flap.offsetWidth;
+  unit.flap.classList.add('is-flipping');
+
+  window.setTimeout(() => {
+    unit.bottom.textContent = next;
+    unit.flap.classList.remove('is-flipping');
+  }, 320);
+
+  unit.value = next;
+}
+
 function tick(deadlineMs        )       {
   const root = byId             ('countdown');
   if (!root) return;
@@ -118,6 +217,7 @@ function tick(deadlineMs        )       {
 
   if (remaining <= 0) {
     root.classList.add('is-closed');
+    root.textContent = 'Comment period closed';
     root.removeAttribute('role');
     if (timerHandle !== undefined) window.clearInterval(timerHandle);
     timerHandle = undefined;
@@ -132,13 +232,9 @@ function tick(deadlineMs        )       {
     s: pad(totalSeconds % 60)
   };
 
-  root.querySelectorAll             ('[data-unit]').forEach((node) => {
-    const key = node.dataset.unit || '';
-    const next = values[key];
-    if (next !== undefined && node.textContent !== next) {
-      node.textContent = next;
-    }
-  });
+  for (const key of ['d', 'h', 'm', 's']) {
+    setFlip(key, values[key]);
+  }
 }
 
 function startTimer(deadlineMs        )       {
@@ -445,15 +541,14 @@ function renderHistoryStatus()       {
     return;
   }
 
-  element.textContent =
-    historySource === 'comments'
-      ? `${count} days · rebuilt from comment dates`
-      : `${count} snapshots · one every six hours`;
+  const basis =
+    historySource === 'comments' ? `${count} days · by posted date` : `${count} snapshots · every six hours`;
+  element.textContent = activeTag === 'all' ? basis : `${activeTag} · ${basis}`;
 }
 
 /* — wiring — */
 
-function wireTimeline()       {
+function syncTimelineBounds()       {
   const slider = byId                  ('timeline');
   if (!slider) return;
 
@@ -463,6 +558,34 @@ function wireTimeline()       {
 
   const row = slider.closest('.slider-row');
   if (row instanceof HTMLElement) row.hidden = historyPoints.length < 2;
+}
+
+function wireTagFilter(tags             )       {
+  const select = byId                   ('tag-select');
+  if (!select || tags.length === 0) return;
+
+  select.innerHTML =
+    '<option value="all">All comments</option>' +
+    tags
+      .map((tag) => `<option value="${tag.id}">${tag.id} · ${formatCount(tag.count)}</option>`)
+      .join('');
+  select.hidden = false;
+
+  select.addEventListener('change', () => {
+    activeTag = select.value;
+    historyPoints = activeTag === 'all' ? allPoints : tagSeries.get(activeTag) ?? allPoints;
+    selectedIndex = Math.max(0, historyPoints.length - 1);
+    renderLineChart();
+    renderHistoryStatus();
+    updateShareBlock();
+    syncTimelineBounds();
+  });
+}
+
+function wireTimeline()       {
+  const slider = byId                  ('timeline');
+  if (!slider) return;
+  syncTimelineBounds();
 
   slider.addEventListener('input', () => {
     const next = Number(slider.value);
@@ -513,19 +636,32 @@ async function loadSummary()                          {
   }
 }
 
-async function loadHistory(summary                )                                                                        {
+                     
+             
+                
+                         
+ 
+
+async function loadHistory(
+  summary                
+)                                                                                           {
   try {
     const response = await fetch('./data/history.json', { cache: 'no-store' });
     if (response.ok) {
       const data = (await response.json())     
                                           
                                 
+                           
        ;
       const points = (data.points || [])
         .filter((point) => point && typeof point.t === 'string')
         .sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
       if (points.length > 0) {
-        return { points, source: data.source === 'comments' ? 'comments' : 'snapshots' };
+        return {
+          points,
+          source: data.source === 'comments' ? 'comments' : 'snapshots',
+          tags: Array.isArray(data.tags) ? data.tags : []
+        };
       }
     }
   } catch (error) {
@@ -535,7 +671,7 @@ async function loadHistory(summary                )                             
   // Before the first history write, fall back to the single current snapshot.
   const counts = summary.counts || {};
   const total = summary.totalPublishedOnDocket || summary.totalIndexedInTracker || 0;
-  if (total <= 0) return { points: [], source: 'snapshots' };
+  if (total <= 0) return { points: [], source: 'snapshots', tags: [] };
 
   return {
     points: [
@@ -547,11 +683,13 @@ async function loadHistory(summary                )                             
         total
       }
     ],
-    source: 'snapshots'
+    source: 'snapshots',
+    tags: []
   };
 }
 
 async function init()                {
+  buildFlipClock();
   startTimer(new Date(FALLBACK_DEADLINE_ISO).getTime());
 
   const summary = await loadSummary();
@@ -563,16 +701,19 @@ async function init()                {
       const deadline = byId                 ('deadline');
       if (deadline) {
         deadline.dateTime = new Date(deadlineMs).toISOString();
-        deadline.textContent = formatInEastern(summary.deadlineIso, 'deadline');
+        deadline.textContent = formatInEastern(summary.deadlineIso, 'long');
       }
     }
   }
 
   renderCounts(summary);
+  if (summary.model) setText('model-name', summary.model);
   setText('synced', formatInEastern(summary.lastSyncedAt, 'synced'));
 
   const history = await loadHistory(summary);
-  historyPoints = history.points;
+  allPoints = history.points;
+  for (const tag of history.tags) tagSeries.set(tag.id, tag.points);
+  historyPoints = allPoints;
   historySource = history.source;
   selectedIndex = Math.max(0, historyPoints.length - 1);
 
@@ -580,6 +721,7 @@ async function init()                {
   renderHistoryStatus();
   updateShareBlock();
   wireTimeline();
+  wireTagFilter(history.tags);
   wireChartToggle();
   observeChartResize();
 

@@ -32,12 +32,17 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Sync Regulations.gov comments & classify with Gemini
+      # The committed docs/data is a complete build from the bulk export.
+      # scripts/sync-comments.ts is superseded by scripts/pipeline.ts and would
+      # overwrite that snapshot with a partial, paged re-sync. Leave this off
+      # until the 6-hourly delta worker lands.
+      - name: Sync (disabled — replaced by bulk ingest + pipeline)
+        if: ${{ false }}
         env:
           REGULATIONS_API_KEY: ${{ secrets.REGULATIONS_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          node --experimental-strip-types scripts/sync-comments.ts
+          node --experimental-strip-types scripts/pipeline.ts
 
       - name: Build TypeScript frontend for GitHub Pages
         run: |
