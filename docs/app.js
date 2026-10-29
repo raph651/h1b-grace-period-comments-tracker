@@ -720,6 +720,12 @@ async function init()                {
   renderLineChart();
   renderHistoryStatus();
   updateShareBlock();
+  const methodDialog = byId                   ('method-dialog');
+  byId             ('open-method')?.addEventListener('click', () => methodDialog?.showModal());
+  methodDialog?.addEventListener('click', (event) => {
+    if (event.target === methodDialog) methodDialog.close();
+  });
+
   wireTimeline();
   wireTagFilter(history.tags);
   wireChartToggle();

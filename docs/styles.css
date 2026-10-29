@@ -1122,3 +1122,72 @@ a:focus-visible {
   opacity: 1;
   visibility: visible;
 }
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+
+.link-btn:hover {
+  text-decoration-color: var(--faint);
+}
+
+.foot-dot {
+  margin: 0 0.5rem;
+}
+
+.method-dialog {
+  width: calc(100% - 2rem);
+  max-width: 34rem;
+  padding: 1.75rem 1.9rem 1.4rem;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.16);
+}
+
+.method-dialog::backdrop {
+  background: rgba(20, 19, 17, 0.35);
+}
+
+.method-dialog .micro {
+  margin-bottom: 1rem;
+}
+
+.method-dialog p {
+  margin: 0 0 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.method-dialog p:last-of-type {
+  margin-bottom: 0;
+}
+
+.method-close {
+  position: absolute;
+  top: 0.85rem;
+  right: 1rem;
+  padding: 0.2rem 0.4rem;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.method-close:hover {
+  color: var(--ink);
+}
