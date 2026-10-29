@@ -33,7 +33,9 @@ const DEADLINE_TIME_ZONE = 'America/New_York';
 
 // Which docket this page shows; set on <body data-docket="…">.
 const DOCKET_SLUG = document.body.dataset.docket || 'h1b';
-const DATA_BASE = `./data/${DOCKET_SLUG}`;
+// Pages live at the root or one directory down; data/ is always at the root.
+const PAGE_BASE = document.body.dataset.base || './';
+const DATA_BASE = `${PAGE_BASE}data/${DOCKET_SLUG}`;
 
 let historyPoints: HistoryPoint[] = [];
 let allPoints: HistoryPoint[] = [];

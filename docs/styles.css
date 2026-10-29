@@ -1208,3 +1208,40 @@ a:focus-visible {
 .cross-link a {
   text-decoration-color: var(--rule);
 }
+
+.case-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.case-list .case + .case {
+  border-top: 1px solid var(--rule);
+}
+
+.case-list a {
+  display: block;
+  padding: 1.15rem 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.case-list a:hover .case-title {
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+
+.case-title {
+  display: block;
+  font-size: 1.02rem;
+}
+
+.case-meta {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+  text-transform: uppercase;
+}
