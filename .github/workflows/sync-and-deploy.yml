@@ -5,7 +5,7 @@ on:
     branches: ["main"]
   schedule:
     # Runs every 6 hours until the comment period ends on Nov 10, 2026 EST
-    - cron: "15 */6 * * *"
+    - cron: "37 */6 * * *"
   workflow_dispatch:
 
 permissions:
